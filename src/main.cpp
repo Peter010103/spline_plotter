@@ -13,7 +13,10 @@ int screen_width = 1280;
 
 int button, state;
 
+int spline_subdiv = 200;
+typedef Eigen::Matrix<double, Eigen::Dynamic, 2, Eigen::RowMajor> SplineMatrix;
 std::vector<std::pair<int, int>> points;
+std::vector<SplineMatrix> splines;
 
 void CreateScreen() {
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA);
@@ -40,6 +43,15 @@ void DrawText(int x, int y, std::string str) {
                      reinterpret_cast<const unsigned char *>(cstr));
 }
 
+void DrawSpline(SplineMatrix spline) {
+    glBegin(GL_LINE_STRIP);
+    for (unsigned int i = 1; i < spline.rows(); i++) {
+        glVertex2i((int)spline(i - 1, 0), (int)spline(i - 1, 1));
+        glVertex2i((int)spline(i, 0), (int)spline(i, 1));
+    }
+    glEnd();
+}
+
 void ComputHermite(std::vector<std::pair<int, int>> control_points) {
     assert(control_points.size() == 4);
 
@@ -58,14 +70,14 @@ void ComputHermite(std::vector<std::pair<int, int>> control_points) {
     // clang-format on
 }
 
-void ComputeBezier(std::vector<std::pair<int, int>> control_points) {
+SplineMatrix ComputeBezier(std::vector<std::pair<int, int>> control_points) {
     assert(control_points.size() == 4);
 
     Eigen::Matrix<double, 1, 4> t_vec;            // T
     Eigen::Matrix<double, 4, 4> basis_matrix;     // M
     Eigen::Matrix<double, 4, 2> geometry_matrix;  // G
     Eigen::Matrix<double, 1, 2> spline_point;
-    Eigen::Matrix<double, -1, 2> spline;  // Q
+    SplineMatrix spline;  // Q
 
     // clang-format off
     basis_matrix << -1, 3, -3, 1,
@@ -83,15 +95,16 @@ void ComputeBezier(std::vector<std::pair<int, int>> control_points) {
     // clang-format on
 
     // Q = TMG
-    for (double t = 0.0; t <= 1.0; t += 0.005) {
-        t_vec << pow(t, 3), pow(t, 2), t, 1;  // T (row-vector)
+    for (double t = 0.0; t <= 1.0; t += 1.0 / spline_subdiv) {
+        t_vec << pow(t, 3), pow(t, 2), t, 1;
         spline_point = t_vec * basis_matrix * geometry_matrix;
         // std::cout << spline_point << std::endl << std::endl;
         spline.conservativeResize(spline.rows() + 1, spline.cols());
         spline.row(spline.rows() - 1) = spline_point;
     }
 
-    assert(spline.rows() == 200 && spline.cols() == 2);
+    assert(spline.rows() == spline_subdiv && spline.cols() == 2);
+    return spline;
 }
 
 void ComputeBSpline(std::vector<std::pair<int, int>> control_points) {
@@ -147,7 +160,11 @@ void RenderScene(void) {
         DrawText(point.first, point.second, point_string);
         i++;
     }
-    
+
+    for (SplineMatrix spline : splines) {
+        DrawSpline(spline);
+    }
+
     glFlush();
     glutSwapBuffers();
 }
@@ -166,7 +183,7 @@ void ProcessMouse(int button, int state, int x, int y) {
             std::vector<std::pair<int, int>>::const_iterator last =
                 points.begin() + points.size();
             std::vector<std::pair<int, int>> control_points(first, last);
-            ComputeBezier(control_points);
+            splines.push_back(ComputeBezier(control_points));
         }
         std::cout << "Number of points:\t" << points.size() << std::endl;
         std::cout << "Number of splines:\t" << points.size() / 4 << std::endl
