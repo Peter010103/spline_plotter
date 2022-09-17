@@ -18,6 +18,9 @@ typedef Eigen::Matrix<double, Eigen::Dynamic, 2, Eigen::RowMajor> SplineMatrix;
 std::vector<std::pair<int, int>> points;
 std::vector<SplineMatrix> splines;
 
+unsigned int num_points = 0;
+unsigned int num_splines = 0;
+
 void CreateScreen() {
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA);
     glutInitWindowPosition(350, 120);
@@ -50,6 +53,10 @@ void DrawSpline(SplineMatrix spline) {
         glVertex2i((int)spline(i, 0), (int)spline(i, 1));
     }
     glEnd();
+}
+
+void DrawConvexHull() {
+    // TODO
 }
 
 void ComputHermite(std::vector<std::pair<int, int>> control_points) {
@@ -177,16 +184,18 @@ void ProcessMouse(int button, int state, int x, int y) {
         std::cout << "Insert Point\t\t"
                   << "(" << x << ", " << y << ")" << std::endl;
 
-        if (points.size() % 4 == 0) {
+        num_points = points.size();
+        if (num_points == 4 || ((num_points - 4) % 3 == 0 && num_points > 4)) {
             std::vector<std::pair<int, int>>::const_iterator first =
                 points.begin() + points.size() - 4;
             std::vector<std::pair<int, int>>::const_iterator last =
                 points.begin() + points.size();
             std::vector<std::pair<int, int>> control_points(first, last);
             splines.push_back(ComputeBezier(control_points));
+            num_splines++;
         }
-        std::cout << "Number of points:\t" << points.size() << std::endl;
-        std::cout << "Number of splines:\t" << points.size() / 4 << std::endl
+        std::cout << "Number of points:\t" << num_points << std::endl;
+        std::cout << "Number of splines:\t" << num_splines << std::endl
                   << std::endl;
     }
 }
