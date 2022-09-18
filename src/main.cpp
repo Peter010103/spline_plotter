@@ -10,26 +10,31 @@
 
 int screen_height = 800;
 int screen_width = 1280;
-
 int button, state;
 
 int spline_order = 3;
 int spline_subdiv = 200;
-
-typedef Eigen::Matrix<double, Eigen::Dynamic, 2, Eigen::RowMajor> SplineMatrix;
-std::vector<std::pair<int, int>> points;
-std::vector<SplineMatrix> splines;
-
-unsigned int num_points = 0;
-unsigned int num_splines = 0;
-unsigned int num_control_points = spline_order + 1;
 
 enum SplineType {
     Hermite = 0,
     Bezier = 1,
     BSpline = 2,
     CatmullRom = 3
-} spline_type;
+};
+
+typedef std::vector<std::pair<int, int>> PairVector;
+typedef Eigen::Matrix<double, Eigen::Dynamic, 2, Eigen::RowMajor> SplineMatrix;
+
+PairVector points;
+std::vector<SplineMatrix> splines;
+
+SplineType spline_type = SplineType::Bezier;
+
+unsigned int num_points = 0;
+unsigned int num_splines = 0;
+unsigned int num_control_points = spline_order + 1;
+
+bool showConvexHull = true;
 
 void CreateScreen() {
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA);
@@ -75,11 +80,9 @@ void DrawSpline(SplineMatrix spline) {
     glEnd();
 }
 
-void DrawConvexHull() {
-    // TODO
 }
 
-SplineMatrix ComputeHermite(std::vector<std::pair<int, int>> control_points) {
+SplineMatrix ComputeHermite(PairVector control_points) {
     assert(control_points.size() == num_control_points);
 
     Eigen::Matrix<double, 1, 4> t_vec;            // T
@@ -112,7 +115,6 @@ SplineMatrix ComputeHermite(std::vector<std::pair<int, int>> control_points) {
     for (double t = 0.0; t <= 1.0; t += 1.0 / spline_subdiv) {
         t_vec << pow(t, 3), pow(t, 2), t, 1;
         spline_point = t_vec * basis_matrix * geometry_matrix;
-        // std::cout << spline_point << std::endl << std::endl;
         spline.conservativeResize(spline.rows() + 1, spline.cols());
         spline.row(spline.rows() - 1) = spline_point;
     }
@@ -121,7 +123,7 @@ SplineMatrix ComputeHermite(std::vector<std::pair<int, int>> control_points) {
     return spline;
 }
 
-SplineMatrix ComputeBezier(std::vector<std::pair<int, int>> control_points) {
+SplineMatrix ComputeBezier(PairVector control_points) {
     assert(control_points.size() == num_control_points);
 
     Eigen::Matrix<double, 1, 4> t_vec;            // T
@@ -149,7 +151,6 @@ SplineMatrix ComputeBezier(std::vector<std::pair<int, int>> control_points) {
     for (double t = 0.0; t <= 1.0; t += 1.0 / spline_subdiv) {
         t_vec << pow(t, 3), pow(t, 2), t, 1;
         spline_point = t_vec * basis_matrix * geometry_matrix;
-        // std::cout << spline_point << std::endl << std::endl;
         spline.conservativeResize(spline.rows() + 1, spline.cols());
         spline.row(spline.rows() - 1) = spline_point;
     }
@@ -158,7 +159,7 @@ SplineMatrix ComputeBezier(std::vector<std::pair<int, int>> control_points) {
     return spline;
 }
 
-SplineMatrix ComputeBSpline(std::vector<std::pair<int, int>> control_points) {
+SplineMatrix ComputeBSpline(PairVector control_points) {
     assert(control_points.size() == num_control_points);
 
     Eigen::Matrix<double, 1, 4> t_vec;            // T
@@ -187,7 +188,6 @@ SplineMatrix ComputeBSpline(std::vector<std::pair<int, int>> control_points) {
     for (double t = 0.0; t <= 1.0; t += 1.0 / spline_subdiv) {
         t_vec << pow(t, 3), pow(t, 2), t, 1;
         spline_point = t_vec * basis_matrix * geometry_matrix;
-        // std::cout << spline_point << std::endl << std::endl;
         spline.conservativeResize(spline.rows() + 1, spline.cols());
         spline.row(spline.rows() - 1) = spline_point;
     }
@@ -196,8 +196,7 @@ SplineMatrix ComputeBSpline(std::vector<std::pair<int, int>> control_points) {
     return spline;
 }
 
-SplineMatrix ComputeCatmullRom(
-    std::vector<std::pair<int, int>> control_points) {
+SplineMatrix ComputeCatmullRom(PairVector control_points) {
     assert(control_points.size() == num_control_points);
 
     Eigen::Matrix<double, 1, 4> t_vec;            // T
@@ -226,7 +225,6 @@ SplineMatrix ComputeCatmullRom(
     for (double t = 0.0; t <= 1.0; t += 1.0 / spline_subdiv) {
         t_vec << pow(t, 3), pow(t, 2), t, 1;
         spline_point = t_vec * basis_matrix * geometry_matrix;
-        // std::cout << spline_point << std::endl << std::endl;
         spline.conservativeResize(spline.rows() + 1, spline.cols());
         spline.row(spline.rows() - 1) = spline_point;
     }
@@ -239,18 +237,16 @@ void EnforceContinuity() {
     // TODO
 }
 
-std::vector<std::pair<int, int>> ReturnLastN(
-    std::vector<std::pair<int, int>> coordinates, unsigned int n) {
-    std::vector<std::pair<int, int>>::const_iterator first =
+PairVector ReturnLastN(PairVector coordinates, unsigned int n) {
+    PairVector::const_iterator first =
         coordinates.begin() + coordinates.size() - n;
-    std::vector<std::pair<int, int>>::const_iterator last =
-        coordinates.begin() + coordinates.size();
-    std::vector<std::pair<int, int>> control_points(first, last);
+    PairVector::const_iterator last = coordinates.begin() + coordinates.size();
+    PairVector control_points(first, last);
 
     return control_points;
 }
 
-void GroupPoints(SplineType spline_type = Hermite) {
+void GroupPoints(SplineType spline_type) {
     num_points = points.size();
 
     if (spline_type == Hermite || spline_type == Bezier) {
@@ -258,22 +254,19 @@ void GroupPoints(SplineType spline_type = Hermite) {
             ((num_points - num_control_points) % spline_order == 0 &&
              num_points > num_control_points)) {
             if (spline_type == Hermite) {
-                splines.push_back(
-                    ComputeHermite(ReturnLastN(points, num_control_points)));
+                splines.push_back(ComputeHermite(control_points));
             } else {
-                splines.push_back(
-                    ComputeBezier(ReturnLastN(points, num_control_points)));
+                splines.push_back(ComputeBezier(control_points));
             }
             num_splines++;
         }
     } else if (spline_type == BSpline || spline_type == CatmullRom) {
         if (num_points >= num_control_points) {
+            PairVector control_points = ReturnLastN(points, num_control_points);
             if (spline_type == BSpline) {
-                splines.push_back(
-                    ComputeBSpline(ReturnLastN(points, num_control_points)));
+                splines.push_back(ComputeBSpline(control_points));
             } else {
-                splines.push_back(
-                    ComputeCatmullRom(ReturnLastN(points, num_control_points)));
+                splines.push_back(ComputeCatmullRom(control_points));
             }
             num_splines++;
         }
@@ -310,7 +303,7 @@ void ProcessMouse(int button, int state, int x, int y) {
         points.push_back(std::pair(x, y));
         std::cout << "Insert Point\t\t"
                   << "(" << x << ", " << y << ")" << std::endl;
-        GroupPoints(SplineType::BSpline);
+        GroupPoints(spline_type);
     }
 }
 
