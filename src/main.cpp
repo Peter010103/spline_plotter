@@ -24,6 +24,13 @@ unsigned int num_points = 0;
 unsigned int num_splines = 0;
 unsigned int num_control_points = spline_order + 1;
 
+enum SplineType {
+    Hermite = 0,
+    Bezier = 1,
+    BSpline = 2,
+    CatmullRom = 3
+} spline_type;
+
 void CreateScreen() {
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA);
     glutInitWindowPosition((1920 - screen_width) / 2,
@@ -193,6 +200,48 @@ void EnforceContinuity() {
     // TODO
 }
 
+std::vector<std::pair<int, int>> ReturnLastN(
+    std::vector<std::pair<int, int>> coordinates, unsigned int n) {
+    std::vector<std::pair<int, int>>::const_iterator first =
+        coordinates.begin() + coordinates.size() - n;
+    std::vector<std::pair<int, int>>::const_iterator last =
+        coordinates.begin() + coordinates.size();
+    std::vector<std::pair<int, int>> control_points(first, last);
+
+    return control_points;
+}
+
+void GroupPoints(SplineType spline_type = Hermite) {
+    num_points = points.size();
+
+    if (spline_type == Hermite || spline_type == Bezier) {
+        if (num_points == num_control_points ||
+            ((num_points - num_control_points) % spline_order == 0 &&
+             num_points > num_control_points)) {
+            if (spline_type == Hermite) {
+                splines.push_back(
+                    ComputeHermite(ReturnLastN(points, num_control_points)));
+            } else {
+                splines.push_back(
+                    ComputeBezier(ReturnLastN(points, num_control_points)));
+            }
+            num_splines++;
+        }
+    } else if (spline_type == BSpline || spline_type == CatmullRom) {
+        if (num_points >= num_control_points) {
+            if (spline_type == BSpline) {
+                splines.push_back(
+                    ComputeBSpline(ReturnLastN(points, num_control_points)));
+            }
+            num_splines++;
+        }
+    }
+
+    // std::cout << "Number of points:\t" << num_points << std::endl;
+    // std::cout << "Number of splines:\t" << num_splines << std::endl
+    //   << std::endl;
+}
+
 void RenderScene(void) {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -219,22 +268,7 @@ void ProcessMouse(int button, int state, int x, int y) {
         points.push_back(std::pair(x, y));
         std::cout << "Insert Point\t\t"
                   << "(" << x << ", " << y << ")" << std::endl;
-
-        num_points = points.size();
-        if (num_points == num_control_points ||
-            ((num_points - num_control_points) % spline_order == 0 &&
-             num_points > num_control_points)) {
-            std::vector<std::pair<int, int>>::const_iterator first =
-                points.begin() + points.size() - num_control_points;
-            std::vector<std::pair<int, int>>::const_iterator last =
-                points.begin() + points.size();
-            std::vector<std::pair<int, int>> control_points(first, last);
-            splines.push_back(ComputeBezier(control_points));
-            num_splines++;
-        }
-        std::cout << "Number of points:\t" << num_points << std::endl;
-        std::cout << "Number of splines:\t" << num_splines << std::endl
-                  << std::endl;
+        GroupPoints(SplineType::BSpline);
     }
 }
 
