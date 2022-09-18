@@ -80,6 +80,32 @@ void DrawSpline(SplineMatrix spline) {
     glEnd();
 }
 
+void DrawConvexHull(SplineType spline_type) {
+    glColor4f(0.2f, 0.2f, 0.5f, 0.3f);
+    if (spline_type == Hermite || spline_type == Bezier) {
+        if (num_points >= num_control_points) {
+            for (unsigned int i = 0; i < num_splines; i++) {
+                glBegin(GL_POLYGON);
+                for (int j = 0; j < 4; j++) {
+                    glVertex2i(points[4 + 3 * i - j - 1].first,
+                               points[4 + 3 * i - j - 1].second);
+                }
+                glEnd();
+            }
+        }
+    }
+    else if (spline_type == BSpline || spline_type == CatmullRom) {
+        if (num_points >= num_control_points) {
+            for (unsigned int i = 0; i < num_splines; i++) {
+                glBegin(GL_POLYGON);
+                for (int j = 3; j >= 0; j--) {
+                    glVertex2i(points[4 + i - j - 1].first,
+                               points[4 + i - j - 1].second);
+                }
+                glEnd();
+            }
+        }
+    }
 }
 
 SplineMatrix ComputeHermite(PairVector control_points) {
@@ -251,8 +277,8 @@ void GroupPoints(SplineType spline_type) {
 
     if (spline_type == Hermite || spline_type == Bezier) {
         if (num_points == num_control_points ||
-            ((num_points - num_control_points) % spline_order == 0 &&
-             num_points > num_control_points)) {
+            (num_points - 3 * num_splines == 4)) {
+            PairVector control_points = ReturnLastN(points, num_control_points);
             if (spline_type == Hermite) {
                 splines.push_back(ComputeHermite(control_points));
             } else {
@@ -279,6 +305,10 @@ void GroupPoints(SplineType spline_type) {
 
 void RenderScene(void) {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glEnable(GL_BLEND);
+    DrawConvexHull(spline_type);
 
     int i = 1;
     for (std::pair<int, int> point : points) {
