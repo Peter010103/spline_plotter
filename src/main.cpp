@@ -13,17 +13,21 @@ int screen_width = 1280;
 
 int button, state;
 
+int spline_order = 3;
 int spline_subdiv = 200;
+
 typedef Eigen::Matrix<double, Eigen::Dynamic, 2, Eigen::RowMajor> SplineMatrix;
 std::vector<std::pair<int, int>> points;
 std::vector<SplineMatrix> splines;
 
 unsigned int num_points = 0;
 unsigned int num_splines = 0;
+unsigned int num_control_points = spline_order + 1;
 
 void CreateScreen() {
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA);
-    glutInitWindowPosition(350, 120);
+    glutInitWindowPosition((1920 - screen_width) / 2,
+                           (1080 - screen_height) / 2);
     glutInitWindowSize(screen_width, screen_height);
     glutCreateWindow("Spline Plotter");
     glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
@@ -34,6 +38,11 @@ void CreateScreen() {
 }
 
 void DrawPoint(int x, int y) {
+    glPointSize(7);
+    glColor3f(0.0f, 0.0f, 0.0f);
+    glEnable(GL_POINT_SMOOTH);
+    glEnable(GL_BLEND);
+
     glBegin(GL_POINTS);
     glVertex2i(x, y);
     glEnd();
@@ -47,6 +56,10 @@ void DrawText(int x, int y, std::string str) {
 }
 
 void DrawSpline(SplineMatrix spline) {
+    glColor3f(1.0f, 0.0f, 0.0f);
+    glLineWidth(2.0f);
+    glEnable(GL_LINE_SMOOTH);
+
     glBegin(GL_LINE_STRIP);
     for (unsigned int i = 1; i < spline.rows(); i++) {
         glVertex2i((int)spline(i - 1, 0), (int)spline(i - 1, 1));
@@ -60,7 +73,7 @@ void DrawConvexHull() {
 }
 
 void ComputHermite(std::vector<std::pair<int, int>> control_points) {
-    assert(control_points.size() == 4);
+    assert(control_points.size() == num_control_points;
 
     Eigen::Matrix<double, 1, 4> t_vec;            // T
     Eigen::Matrix<double, 4, 4> basis_matrix;     // M
@@ -78,7 +91,7 @@ void ComputHermite(std::vector<std::pair<int, int>> control_points) {
 }
 
 SplineMatrix ComputeBezier(std::vector<std::pair<int, int>> control_points) {
-    assert(control_points.size() == 4);
+    assert(control_points.size() == num_control_points);
 
     Eigen::Matrix<double, 1, 4> t_vec;            // T
     Eigen::Matrix<double, 4, 4> basis_matrix;     // M
@@ -115,7 +128,7 @@ SplineMatrix ComputeBezier(std::vector<std::pair<int, int>> control_points) {
 }
 
 void ComputeBSpline(std::vector<std::pair<int, int>> control_points) {
-    assert(control_points.size() == 4);
+    assert(control_points.size() == num_control_points);
 
     Eigen::Matrix<double, 1, 4> t_vec;            // T
     Eigen::Matrix<double, 4, 4> basis_matrix;     // M
@@ -134,7 +147,7 @@ void ComputeBSpline(std::vector<std::pair<int, int>> control_points) {
 }
 
 void ComputeCatmullRom(std::vector<std::pair<int, int>> control_points) {
-    assert(control_points.size() == 4);
+    assert(control_points.size() == num_control_points);
 
     Eigen::Matrix<double, 1, 4> t_vec;            // T
     Eigen::Matrix<double, 4, 4> basis_matrix;     // M
@@ -152,13 +165,12 @@ void ComputeCatmullRom(std::vector<std::pair<int, int>> control_points) {
     // clang-format on
 }
 
+void EnforceContinuity() {
+    // TODO
+}
+
 void RenderScene(void) {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-    glPointSize(7);
-    glColor3f(0.0f, 0.0f, 0.0f);
-    glEnable(GL_POINT_SMOOTH);
-    glEnable(GL_BLEND);
 
     int i = 1;
     for (std::pair<int, int> point : points) {
@@ -185,9 +197,11 @@ void ProcessMouse(int button, int state, int x, int y) {
                   << "(" << x << ", " << y << ")" << std::endl;
 
         num_points = points.size();
-        if (num_points == 4 || ((num_points - 4) % 3 == 0 && num_points > 4)) {
+        if (num_points == num_control_points ||
+            ((num_points - num_control_points) % spline_order == 0 &&
+             num_points > num_control_points)) {
             std::vector<std::pair<int, int>>::const_iterator first =
-                points.begin() + points.size() - 4;
+                points.begin() + points.size() - num_control_points;
             std::vector<std::pair<int, int>>::const_iterator last =
                 points.begin() + points.size();
             std::vector<std::pair<int, int>> control_points(first, last);
@@ -203,7 +217,6 @@ void ProcessMouse(int button, int state, int x, int y) {
 void ProcessMouseActiveMotion(int x, int y) {
     // drag motion
     if ((state == GLUT_DOWN) && (button == GLUT_LEFT_BUTTON)) {
-        std::cout << "Currently dragging" << std::endl;
     }
 }
 
