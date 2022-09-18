@@ -72,13 +72,16 @@ void DrawConvexHull() {
     // TODO
 }
 
-void ComputHermite(std::vector<std::pair<int, int>> control_points) {
-    assert(control_points.size() == num_control_points;
+SplineMatrix ComputeHermite(std::vector<std::pair<int, int>> control_points) {
+    assert(control_points.size() == num_control_points);
 
     Eigen::Matrix<double, 1, 4> t_vec;            // T
     Eigen::Matrix<double, 4, 4> basis_matrix;     // M
     Eigen::Matrix<double, 4, 2> geometry_matrix;  // G
     Eigen::Matrix<double, 1, 2> spline_point;
+    SplineMatrix spline;  // Q
+
+    spline_point << 0, 0;
 
     // clang-format off
     basis_matrix << 2, -2, 1, 1,
@@ -86,8 +89,29 @@ void ComputHermite(std::vector<std::pair<int, int>> control_points) {
                     0, 0, 1, 0,
                     1, 0, 0, 0;
 
-    spline_point << 0, 0;
+    std::pair<int, int> tangent1 = std::make_pair(control_points[1].first - control_points[0].first,
+    control_points[1].second - control_points[0].second);
+    std::pair<int, int> tangent2 = std::make_pair(control_points[2].first - control_points[3].first,
+    control_points[2].second - control_points[3].second);
+
+    geometry_matrix <<
+        control_points[0].first, control_points[0].second,
+        control_points[3].first, control_points[3].second,
+        tangent1.first, tangent1.second,
+        tangent2.first, tangent2.second;
     // clang-format on
+
+    // Q = TMG
+    for (double t = 0.0; t <= 1.0; t += 1.0 / spline_subdiv) {
+        t_vec << pow(t, 3), pow(t, 2), t, 1;
+        spline_point = t_vec * basis_matrix * geometry_matrix;
+        // std::cout << spline_point << std::endl << std::endl;
+        spline.conservativeResize(spline.rows() + 1, spline.cols());
+        spline.row(spline.rows() - 1) = spline_point;
+    }
+
+    assert(spline.rows() == spline_subdiv && spline.cols() == 2);
+    return spline;
 }
 
 SplineMatrix ComputeBezier(std::vector<std::pair<int, int>> control_points) {
@@ -98,6 +122,8 @@ SplineMatrix ComputeBezier(std::vector<std::pair<int, int>> control_points) {
     Eigen::Matrix<double, 4, 2> geometry_matrix;  // G
     Eigen::Matrix<double, 1, 2> spline_point;
     SplineMatrix spline;  // Q
+
+    spline_point << 0, 0;
 
     // clang-format off
     basis_matrix << -1, 3, -3, 1,
@@ -110,8 +136,6 @@ SplineMatrix ComputeBezier(std::vector<std::pair<int, int>> control_points) {
         control_points[1].first, control_points[1].second,
         control_points[2].first, control_points[2].second,
         control_points[3].first, control_points[3].second;
-
-    spline_point << 0, 0;
     // clang-format on
 
     // Q = TMG
