@@ -15,8 +15,7 @@ int button, state;
 
 int spline_order = 3;
 int spline_subdiv = 200;
-
-enum SplineType { Hermite = 0, Bezier = 1, BSpline = 2, CatmullRom = 3 };
+std::string spline_type = "Hermite";
 
 typedef std::vector<std::pair<int, int>> PairVector;
 typedef Eigen::Matrix<double, Eigen::Dynamic, 2, Eigen::RowMajor> SplineMatrix;
@@ -24,13 +23,13 @@ typedef Eigen::Matrix<double, Eigen::Dynamic, 2, Eigen::RowMajor> SplineMatrix;
 PairVector points;
 std::vector<SplineMatrix> splines;
 
-SplineType spline_type = SplineType::Bezier;
-
 unsigned int num_points = 0;
 unsigned int num_splines = 0;
 unsigned int num_control_points = spline_order + 1;
 
-bool showConvexHull = true;
+bool showConvexHull = false;
+bool C1continuity = false;
+bool C2continuity = false;
 
 void CreateScreen() {
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA);
@@ -76,9 +75,9 @@ void DrawSpline(SplineMatrix spline) {
     glEnd();
 }
 
-void DrawConvexHull(SplineType spline_type) {
-    glColor4f(0.2f, 0.2f, 0.5f, 0.3f);
-    if (spline_type == Hermite || spline_type == Bezier) {
+void DrawConvexHull(std::string spline_type) {
+    glColor4f(0.2f, 0.2f, 0.5f, 0.2f);
+    if (spline_type == "Hermite" || spline_type == "Bezier") {
         if (num_points >= num_control_points) {
             for (unsigned int i = 0; i < num_splines; i++) {
                 glBegin(GL_POLYGON);
@@ -89,7 +88,7 @@ void DrawConvexHull(SplineType spline_type) {
                 glEnd();
             }
         }
-    } else if (spline_type == BSpline || spline_type == CatmullRom) {
+    } else if (spline_type == "BSpline" || spline_type == "CatmullRom") {
         if (num_points >= num_control_points) {
             for (unsigned int i = 0; i < num_splines; i++) {
                 glBegin(GL_POLYGON);
@@ -120,16 +119,16 @@ SplineMatrix ComputeHermite(PairVector control_points) {
                     0, 0, 1, 0,
                     1, 0, 0, 0;
 
-    std::pair<int, int> tangent1 = std::make_pair(control_points[1].first - control_points[0].first,
-    control_points[1].second - control_points[0].second);
-    std::pair<int, int> tangent2 = std::make_pair(control_points[2].first - control_points[3].first,
-    control_points[2].second - control_points[3].second);
+    std::pair<int, int> tangent1 =
+        std::make_pair(control_points[1].first - control_points[0].first,
+                       control_points[1].second - control_points[0].second);
+    std::pair<int, int> tangent2 =
+        std::make_pair(control_points[2].first - control_points[3].first,
+                       control_points[2].second - control_points[3].second);
 
-    geometry_matrix <<
-        control_points[0].first, control_points[0].second,
-        control_points[3].first, control_points[3].second,
-        tangent1.first, tangent1.second,
-        tangent2.first, tangent2.second;
+    geometry_matrix << control_points[0].first, control_points[0].second,
+        control_points[3].first, control_points[3].second, tangent1.first,
+        tangent1.second, tangent2.first, tangent2.second;
     // clang-format on
 
     // Q = TMG
@@ -267,24 +266,24 @@ PairVector ReturnLastN(PairVector coordinates, unsigned int n) {
     return control_points;
 }
 
-void GroupPoints(SplineType spline_type) {
+void GroupPoints(std::string spline_type) {
     num_points = points.size();
 
-    if (spline_type == Hermite || spline_type == Bezier) {
+    if (spline_type == "Hermite" || spline_type == "Bezier") {
         if (num_points == num_control_points ||
             (num_points - 3 * num_splines == 4)) {
             PairVector control_points = ReturnLastN(points, num_control_points);
-            if (spline_type == Hermite) {
+            if (spline_type == "Hermite") {
                 splines.push_back(ComputeHermite(control_points));
             } else {
                 splines.push_back(ComputeBezier(control_points));
             }
             num_splines++;
         }
-    } else if (spline_type == BSpline || spline_type == CatmullRom) {
+    } else if (spline_type == "BSpline" || spline_type == "CatmullRom") {
         if (num_points >= num_control_points) {
             PairVector control_points = ReturnLastN(points, num_control_points);
-            if (spline_type == BSpline) {
+            if (spline_type == "BSpline") {
                 splines.push_back(ComputeBSpline(control_points));
             } else {
                 splines.push_back(ComputeCatmullRom(control_points));
@@ -303,7 +302,7 @@ void RenderScene(void) {
 
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glEnable(GL_BLEND);
-    DrawConvexHull(spline_type);
+    if (showConvexHull) DrawConvexHull(spline_type);
 
     int i = 1;
     for (std::pair<int, int> point : points) {
@@ -338,37 +337,41 @@ void ProcessMouseActiveMotion(int x, int y) {
     }
 }
 
-void ChooseSplineType(std::string string) {
-    std::cout << "Choosing " << string << " curve" << std::endl;
-    if (string == "hermite" || string == "Hermite")
-        spline_type == Hermite;
-    else if (string == "bezier" || string == "Bezier")
-        spline_type == Bezier;
-    else if (string == "bspline" || string == "BSpline")
-        spline_type == BSpline;
-    else if (string == "catmullrom" || string == "CatmullRom")
-        spline_type == CatmullRom;
-    else {
-        std::cout << "Invalid argument --spline_type {hermite, bezier, "
-                     "bspline, catmullrom}"
+bool CheckArgSplineType(std::vector<std::string> args) {
+    bool valid = false;
+    auto checkSplineType =
+        std::find(std::begin(args), std::end(args), "--spline_type");
+    if (checkSplineType != std::end(args)) {
+        spline_type = *(++checkSplineType);
+        if (spline_type == "Hermite" || spline_type == "Bezier" ||
+            spline_type == "BSpline" || spline_type == "CatmullRom") {
+            valid = true;
+        } else {
+            std::cout
+                << "Invalid argument --spline_type {Hermite, Bezier, BSpline, "
+                   "CatmullRom}"
+                << std::endl;
+        }
+    } else {
+        std::cout << "No argument --spline_type {Hermite, Bezier, BSpline, "
+                     "CatmullRom}"
                   << std::endl;
+    }
+    return valid;
+}
+
+void CheckArgConvexHull(std::vector<std::string> args) {
+    auto checkConvexHullPlotting =
+        std::find(std::begin(args), std::end(args), "--show_convex_hull");
+    if (checkConvexHullPlotting != std::end(args)) {
+        if (*(++checkConvexHullPlotting) == "true") showConvexHull = true;
     }
 }
 
 int main(int argc, char *argv[]) {
-    std::string current_bin_name = argv[0];
     std::vector<std::string> args(argv, argv + argc);
-
-    auto checkSplineType =
-        std::find(std::begin(args), std::end(args), "--spline_type");
-    if (checkSplineType != std::end(args)) {
-        ChooseSplineType(*(++checkSplineType));
-    } else {
-        std::cout << "No argument --spline_type {hermite, bezier, bspline, "
-                     "catmullrom}"
-                  << std::endl;
-        return EXIT_FAILURE;
-    }
+    if(CheckArgSplineType(args) == false) return EXIT_FAILURE;
+    CheckArgConvexHull(args);
 
     glutInit(&argc, argv);
     CreateScreen();
