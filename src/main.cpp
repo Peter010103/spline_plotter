@@ -26,9 +26,9 @@ unsigned int num_points = 0;
 unsigned int num_splines = 0;
 unsigned int num_control_points = spline_order + 1;
 
-bool C1continuity = false;
-bool C2continuity = false;
 unsigned int showConvexHull = 0;
+unsigned int GCont = 1;
+unsigned int CCont = 1;
 
 void CreateScreen() {
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA);
@@ -58,10 +58,10 @@ void DrawText(int x, int y, std::string str) {
     glRasterPos2i(x + 5, y + 5);
     auto cstr = str.c_str();
     glutBitmapString(GLUT_BITMAP_9_BY_15,
-                     reinterpret_cast<const unsigned char *>(cstr));
+                     reinterpret_cast<const unsigned char*>(cstr));
 }
 
-void DrawSpline(SplineMatrix spline) {
+void DrawSpline(SplineMatrix& spline) {
     glColor3f(1.0f, 0.0f, 0.0f);
     glLineWidth(2.5f);
     glEnable(GL_LINE_SMOOTH);
@@ -92,8 +92,7 @@ void DrawConvexHull(std::string spline_type_, unsigned int style = 0) {
             }
             glEnd();
             glPopAttrib();
-        }
-        else if (style == 2) {
+        } else if (style == 2) {
             if (spline_type_ == "Hermite" || spline_type_ == "Bezier") {
                 for (unsigned int i = 0; i < num_splines; i++) {
                     glPushAttrib(GL_ENABLE_BIT);
@@ -123,7 +122,7 @@ void DrawConvexHull(std::string spline_type_, unsigned int style = 0) {
     }
 }
 
-SplineMatrix ComputeHermite(PairVector control_points) {
+SplineMatrix ComputeHermite(PairVector& control_points) {
     assert(control_points.size() == num_control_points);
 
     Eigen::Matrix<double, 1, 4> t_vec;            // T
@@ -164,7 +163,7 @@ SplineMatrix ComputeHermite(PairVector control_points) {
     return spline;
 }
 
-SplineMatrix ComputeBezier(PairVector control_points) {
+SplineMatrix ComputeBezier(PairVector& control_points) {
     assert(control_points.size() == num_control_points);
 
     Eigen::Matrix<double, 1, 4> t_vec;            // T
@@ -200,7 +199,7 @@ SplineMatrix ComputeBezier(PairVector control_points) {
     return spline;
 }
 
-SplineMatrix ComputeBSpline(PairVector control_points) {
+SplineMatrix ComputeBSpline(PairVector& control_points) {
     assert(control_points.size() == num_control_points);
 
     Eigen::Matrix<double, 1, 4> t_vec;            // T
@@ -237,7 +236,7 @@ SplineMatrix ComputeBSpline(PairVector control_points) {
     return spline;
 }
 
-SplineMatrix ComputeCatmullRom(PairVector control_points) {
+SplineMatrix ComputeCatmullRom(PairVector& control_points) {
     assert(control_points.size() == num_control_points);
 
     Eigen::Matrix<double, 1, 4> t_vec;            // T
@@ -274,11 +273,7 @@ SplineMatrix ComputeCatmullRom(PairVector control_points) {
     return spline;
 }
 
-void EnforceContinuity() {
-    // TODO
-}
-
-PairVector ReturnLastN(PairVector coordinates, unsigned int n) {
+PairVector ReturnLastN(PairVector& coordinates, unsigned int n) {
     unsigned int lenInput = static_cast<unsigned int>(coordinates.size());
     PairVector::const_iterator first = coordinates.begin() + lenInput - n;
     PairVector::const_iterator last = coordinates.begin() + lenInput;
@@ -287,6 +282,48 @@ PairVector ReturnLastN(PairVector coordinates, unsigned int n) {
     return control_points;
 }
 
+void EnforceContinuity(PairVector& coordinates, unsigned int GCont_,
+                       unsigned int CCont_) {
+    Eigen::Vector2d prevDir;
+    Eigen::Vector2d currDir;
+    Eigen::Vector2d prevPoint;
+    Eigen::Vector2d newPoint;
+
+    // Enforce G1 continuity
+    if (GCont_ == 1 && (spline_type == "Hermite" || spline_type == "Bezier")) {
+        if (num_points % 3 == 2 && num_points > num_control_points) {
+            // indices further reduced by 1 as num_points starts from 1
+            prevDir << static_cast<double>(
+                coordinates[num_points - 1 - 1].first -
+                coordinates[num_points - 2 - 1].first),
+                static_cast<double>(coordinates[num_points - 1 - 1].second -
+                                    coordinates[num_points - 2 - 1].second);
+
+            currDir << static_cast<double>(
+                coordinates[num_points - 1].first -
+                coordinates[num_points - 1 - 1].first),
+                static_cast<double>(coordinates[num_points - 1].second -
+                                    coordinates[num_points - 1 - 1].second);
+
+            prevPoint << static_cast<double>(
+                coordinates[num_points - 1 - 1].first),
+                static_cast<double>(coordinates[num_points - 1 - 1].second);
+
+            prevDir = prevDir.normalized();
+            newPoint = (currDir.dot(prevDir)) * prevDir + prevPoint;
+            // newPoint = newPoint.template cast<>
+            newPoint(0) = static_cast<int>(newPoint(0));
+            newPoint(1) = static_cast<int>(newPoint(1));
+
+            std::cout << "Adjust Point " << num_points << "\t\t"
+                      << "(" << newPoint(0) << ", " << newPoint(1) << ")"
+                      << std::endl;
+
+            coordinates[num_points - 1].first = (newPoint(0));
+            coordinates[num_points - 1].second = (newPoint(1));
+        }
+    }
+}
 
 void GroupPoints(std::string spline_type_) {
     if (spline_type_ == "Hermite" || spline_type_ == "Bezier") {
@@ -311,10 +348,6 @@ void GroupPoints(std::string spline_type_) {
             num_splines++;
         }
     }
-
-    // std::cout << "Number of points:\t" << num_points << std::endl;
-    // std::cout << "Number of splines:\t" << num_splines << std::endl
-    //   << std::endl;
 }
 
 void RenderScene(void) {
@@ -348,6 +381,7 @@ void ProcessMouse(int button, int state, int x, int y) {
         num_points = points.size();
         std::cout << "Insert Point " << num_points << "\t\t"
                   << "(" << x << ", " << y << ")" << std::endl;
+        EnforceContinuity(points, GCont, CCont);
         GroupPoints(spline_type);
     }
 }
@@ -390,7 +424,7 @@ void CheckArgConvexHull(std::vector<std::string> args) {
     }
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char* argv[]) {
     std::vector<std::string> args(argv, argv + argc);
     if (CheckArgSplineType(args) == false) return EXIT_FAILURE;
     CheckArgConvexHull(args);
