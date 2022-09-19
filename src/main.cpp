@@ -92,7 +92,7 @@ void DrawConvexHull(std::string spline_type) {
         if (num_points >= num_control_points) {
             for (unsigned int i = 0; i < num_splines; i++) {
                 glBegin(GL_POLYGON);
-                for (int j = 3; j >= 0; j--) {
+                for (unsigned int j = 0; j < 4; j++) {
                     glVertex2i(points[4 + i - j - 1].first,
                                points[4 + i - j - 1].second);
                 }
