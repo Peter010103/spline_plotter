@@ -26,9 +26,9 @@ unsigned int num_points = 0;
 unsigned int num_splines = 0;
 unsigned int num_control_points = spline_order + 1;
 
-bool showConvexHull = false;
 bool C1continuity = false;
 bool C2continuity = false;
+unsigned int showConvexHull = 0;
 
 void CreateScreen() {
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA);
@@ -63,7 +63,7 @@ void DrawText(int x, int y, std::string str) {
 
 void DrawSpline(SplineMatrix spline) {
     glColor3f(1.0f, 0.0f, 0.0f);
-    glLineWidth(2.0f);
+    glLineWidth(2.5f);
     glEnable(GL_LINE_SMOOTH);
 
     glBegin(GL_LINE_STRIP);
@@ -76,28 +76,48 @@ void DrawSpline(SplineMatrix spline) {
     glEnd();
 }
 
-void DrawConvexHull(std::string spline_type_) {
-    glColor4f(0.2f, 0.2f, 0.5f, 0.2f);
-    if (spline_type_ == "Hermite" || spline_type_ == "Bezier") {
-        if (num_points >= num_control_points) {
-            for (unsigned int i = 0; i < num_splines; i++) {
-                glBegin(GL_POLYGON);
-                for (unsigned int j = 0; j < 4; j++) {
-                    glVertex2i(points[4 + 3 * i - j - 1].first,
-                               points[4 + 3 * i - j - 1].second);
-                }
-                glEnd();
+void DrawConvexHull(std::string spline_type_, unsigned int style = 0) {
+    if (num_points >= num_control_points) {
+        if (style == 1) {
+            glPushAttrib(GL_ENABLE_BIT);
+            glLineStipple(4, 0xAAAA);
+            glEnable(GL_LINE_STIPPLE);
+            glColor3f(0.0f, 0.0f, 0.0f);
+            glLineWidth(1.5f);
+            glBegin(GL_LINES);
+
+            for (unsigned int i = 0; i < num_points - 1; i++) {
+                glVertex2i(points[i].first, points[i].second);
+                glVertex2i(points[i + 1].first, points[i + 1].second);
             }
+            glEnd();
+            glPopAttrib();
         }
-    } else if (spline_type_ == "BSpline" || spline_type_ == "CatmullRom") {
-        if (num_points >= num_control_points) {
-            for (unsigned int i = 0; i < num_splines; i++) {
-                glBegin(GL_POLYGON);
-                for (unsigned int j = 0; j < 4; j++) {
-                    glVertex2i(points[4 + i - j - 1].first,
-                               points[4 + i - j - 1].second);
+        else if (style == 2) {
+            if (spline_type_ == "Hermite" || spline_type_ == "Bezier") {
+                for (unsigned int i = 0; i < num_splines; i++) {
+                    glPushAttrib(GL_ENABLE_BIT);
+                    glColor4f(0.2f, 0.2f, 0.5f, 0.2f);
+                    glBegin(GL_POLYGON);
+
+                    for (unsigned int j = 0; j < 4; j++) {
+                        glVertex2i(points[4 + 3 * i - j - 1].first,
+                                   points[4 + 3 * i - j - 1].second);
+                    }
+                    glPopAttrib();
+                    glEnd();
                 }
-                glEnd();
+            } else if (spline_type_ == "BSpline" ||
+                       spline_type_ == "CatmullRom") {
+                for (unsigned int i = 0; i < num_splines; i++) {
+                    glColor4f(0.2f, 0.2f, 0.5f, 0.2f);
+                    glBegin(GL_POLYGON);
+                    for (unsigned int j = 0; j < 4; j++) {
+                        glVertex2i(points[4 + i - j - 1].first,
+                                   points[4 + i - j - 1].second);
+                        glEnd();
+                    }
+                }
             }
         }
     }
@@ -267,9 +287,8 @@ PairVector ReturnLastN(PairVector coordinates, unsigned int n) {
     return control_points;
 }
 
-void GroupPoints(std::string spline_type_) {
-    num_points = points.size();
 
+void GroupPoints(std::string spline_type_) {
     if (spline_type_ == "Hermite" || spline_type_ == "Bezier") {
         if (num_points == num_control_points ||
             (num_points - 3 * num_splines == 4)) {
@@ -303,7 +322,7 @@ void RenderScene(void) {
 
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glEnable(GL_BLEND);
-    if (showConvexHull) DrawConvexHull(spline_type);
+    if (showConvexHull) DrawConvexHull(spline_type, showConvexHull);
 
     int i = 1;
     for (std::pair<int, int> point : points) {
@@ -326,7 +345,8 @@ void ProcessMouse(int button, int state, int x, int y) {
     y = screen_height - y;
     if ((state == GLUT_UP) && (button == GLUT_LEFT_BUTTON)) {
         points.push_back(std::pair(x, y));
-        std::cout << "Insert Point " << points.size() << "\t\t"
+        num_points = points.size();
+        std::cout << "Insert Point " << num_points << "\t\t"
                   << "(" << x << ", " << y << ")" << std::endl;
         GroupPoints(spline_type);
     }
@@ -366,7 +386,7 @@ void CheckArgConvexHull(std::vector<std::string> args) {
     auto checkConvexHullPlotting =
         std::find(std::begin(args), std::end(args), "--show_convex_hull");
     if (checkConvexHullPlotting != std::end(args)) {
-        if (*(++checkConvexHullPlotting) == "true") showConvexHull = true;
+        showConvexHull = std::stoul(*(++checkConvexHullPlotting));
     }
 }
 
