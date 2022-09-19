@@ -93,7 +93,8 @@ void DrawConvexHull(std::string spline_type_, unsigned int style = 0) {
             glEnd();
             glPopAttrib();
         } else if (style == 2) {
-            if (spline_type_ == "Hermite" || spline_type_ == "Bezier") {
+            if (spline_type_ == "Hermite" || spline_type_ == "Bezier" ||
+                spline_type == "MINVO") {
                 for (unsigned int i = 0; i < num_splines; i++) {
                     glPushAttrib(GL_ENABLE_BIT);
                     glColor4f(0.2f, 0.2f, 0.5f, 0.2f);
@@ -273,6 +274,43 @@ SplineMatrix ComputeCatmullRom(PairVector& control_points) {
     return spline;
 }
 
+SplineMatrix ComputeMINVO(PairVector& control_points) {
+    assert(control_points.size() == num_control_points);
+
+    Eigen::Matrix<double, 1, 4> t_vec;            // T
+    Eigen::Matrix<double, 4, 4> basis_matrix;     // M
+    Eigen::Matrix<double, 4, 2> geometry_matrix;  // G
+    Eigen::Matrix<double, 1, 2> spline_point;
+    SplineMatrix spline;  // Q
+
+    spline_point << 0, 0;
+
+    // clang-format off
+    basis_matrix << -0.4302, 0.4568, -0.02698, 0.0004103,
+                    0.8349, -0.4568, -0.7921, 0.4996,
+                    -0.8349, -0.4568, 0.7921, 0.4996,
+                    0.4302, 0.4568, 0.02698, 0.0004103;
+    basis_matrix.transposeInPlace();
+
+    geometry_matrix <<
+        control_points[0].first, control_points[0].second,
+        control_points[1].first, control_points[1].second,
+        control_points[2].first, control_points[2].second,
+        control_points[3].first, control_points[3].second;
+    // clang-format on
+
+    // Q = TMG
+    for (double t = -1.0; t <= 1.0; t += 1.0 / spline_subdiv) {
+        t_vec << pow(t, 3), pow(t, 2), t, 1;
+        spline_point = t_vec * basis_matrix * geometry_matrix;
+        spline.conservativeResize(spline.rows() + 1, spline.cols());
+        spline.row(spline.rows() - 1) = spline_point;
+    }
+
+    assert(spline.rows() == 2 * spline_subdiv && spline.cols() == 2);
+    return spline;
+}
+
 PairVector ReturnLastN(PairVector& coordinates, unsigned int n) {
     unsigned int lenInput = static_cast<unsigned int>(coordinates.size());
     PairVector::const_iterator first = coordinates.begin() + lenInput - n;
@@ -290,7 +328,8 @@ void EnforceContinuity(PairVector& coordinates, unsigned int GCont_,
     Eigen::Vector2d newPoint;
 
     // Enforce G1 continuity
-    if (GCont_ == 1 && (spline_type == "Hermite" || spline_type == "Bezier")) {
+    if (GCont_ == 1 && (spline_type == "Hermite" || spline_type == "Bezier" ||
+                        spline_type == "MINVO")) {
         if (num_points % 3 == 2 && num_points > num_control_points) {
             // indices further reduced by 1 as num_points starts from 1
             prevDir << static_cast<double>(
@@ -326,7 +365,8 @@ void EnforceContinuity(PairVector& coordinates, unsigned int GCont_,
 }
 
 void GroupPoints(std::string spline_type_) {
-    if (spline_type_ == "Hermite" || spline_type_ == "Bezier") {
+    if (spline_type_ == "Hermite" || spline_type_ == "Bezier" ||
+        spline_type == "MINVO") {
         if (num_points == num_control_points ||
             (num_points - 3 * num_splines == 4)) {
             PairVector control_points = ReturnLastN(points, num_control_points);
@@ -399,18 +439,19 @@ bool CheckArgSplineType(std::vector<std::string> args) {
     if (checkSplineType != std::end(args)) {
         std::string spline_type_ = *(++checkSplineType);
         if (spline_type_ == "Hermite" || spline_type_ == "Bezier" ||
-            spline_type_ == "BSpline" || spline_type_ == "CatmullRom") {
+            spline_type_ == "BSpline" || spline_type_ == "CatmullRom" ||
+            spline_type_ == "MINVO") {
             valid = true;
             spline_type = spline_type_;
         } else {
             std::cout
                 << "Invalid argument --spline_type {Hermite, Bezier, BSpline, "
-                   "CatmullRom}"
+                   "CatmullRom, MINVO}"
                 << std::endl;
         }
     } else {
         std::cout << "No argument --spline_type {Hermite, Bezier, BSpline, "
-                     "CatmullRom}"
+                     "CatmullRom, MINVO}"
                   << std::endl;
     }
     return valid;
