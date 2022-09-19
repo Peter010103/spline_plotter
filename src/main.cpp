@@ -3,6 +3,7 @@
 #include <GL/glut.h>
 
 #include <Eigen/Dense>
+#include <algorithm>
 #include <cmath>
 #include <iostream>
 #include <string>
@@ -15,12 +16,7 @@ int button, state;
 int spline_order = 3;
 int spline_subdiv = 200;
 
-enum SplineType {
-    Hermite = 0,
-    Bezier = 1,
-    BSpline = 2,
-    CatmullRom = 3
-};
+enum SplineType { Hermite = 0, Bezier = 1, BSpline = 2, CatmullRom = 3 };
 
 typedef std::vector<std::pair<int, int>> PairVector;
 typedef Eigen::Matrix<double, Eigen::Dynamic, 2, Eigen::RowMajor> SplineMatrix;
@@ -93,8 +89,7 @@ void DrawConvexHull(SplineType spline_type) {
                 glEnd();
             }
         }
-    }
-    else if (spline_type == BSpline || spline_type == CatmullRom) {
+    } else if (spline_type == BSpline || spline_type == CatmullRom) {
         if (num_points >= num_control_points) {
             for (unsigned int i = 0; i < num_splines; i++) {
                 glBegin(GL_POLYGON);
@@ -343,7 +338,38 @@ void ProcessMouseActiveMotion(int x, int y) {
     }
 }
 
+void ChooseSplineType(std::string string) {
+    std::cout << "Choosing " << string << " curve" << std::endl;
+    if (string == "hermite" || string == "Hermite")
+        spline_type == Hermite;
+    else if (string == "bezier" || string == "Bezier")
+        spline_type == Bezier;
+    else if (string == "bspline" || string == "BSpline")
+        spline_type == BSpline;
+    else if (string == "catmullrom" || string == "CatmullRom")
+        spline_type == CatmullRom;
+    else {
+        std::cout << "Invalid argument --spline_type {hermite, bezier, "
+                     "bspline, catmullrom}"
+                  << std::endl;
+    }
+}
+
 int main(int argc, char *argv[]) {
+    std::string current_bin_name = argv[0];
+    std::vector<std::string> args(argv, argv + argc);
+
+    auto checkSplineType =
+        std::find(std::begin(args), std::end(args), "--spline_type");
+    if (checkSplineType != std::end(args)) {
+        ChooseSplineType(*(++checkSplineType));
+    } else {
+        std::cout << "No argument --spline_type {hermite, bezier, bspline, "
+                     "catmullrom}"
+                  << std::endl;
+        return EXIT_FAILURE;
+    }
+
     glutInit(&argc, argv);
     CreateScreen();
     glutDisplayFunc(RenderScene);
