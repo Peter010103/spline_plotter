@@ -123,191 +123,72 @@ void DrawConvexHull(std::string spline_type_, unsigned int style = 0) {
     }
 }
 
-SplineMatrix ComputeHermite(PairVector& control_points) {
-    assert(control_points.size() == num_control_points);
+SplineMatrix ComputeSplinePoints(PairVector& control_points,
+                                 std::string spline_type_,
+                                 unsigned int spline_order_) {
+    int num_control_points_ = static_cast<int>(spline_order_) + 1;
+    assert(static_cast<int>(control_points.size()) == num_control_points_);
 
-    Eigen::Matrix<double, 1, 4> t_vec;            // T
-    Eigen::Matrix<double, 4, 4> basis_matrix;     // M
-    Eigen::Matrix<double, 4, 2> geometry_matrix;  // G
+    Eigen::Matrix<double, 1, -1> t_vec(1, num_control_points_);  // T
+    Eigen::Matrix<double, -1, -1> basis_matrix(num_control_points_,
+                                               num_control_points_);        // M
+    Eigen::Matrix<double, -1, -1> geometry_matrix(num_control_points_, 2);  // G
     Eigen::Matrix<double, 1, 2> spline_point;
     SplineMatrix spline;  // Q
 
     spline_point << 0, 0;
 
-    // clang-format off
-    basis_matrix << 2, -2, 1, 1,
-                    -3, 3, -2, -1,
-                    0, 0, 1, 0,
-                    1, 0, 0, 0;
+    if (spline_type_ == "Hermite") {
+        basis_matrix << 2, -2, 1, 1, -3, 3, -2, -1, 0, 0, 1, 0, 1, 0, 0, 0;
 
-    std::pair<int, int> tangent1 =
-        std::make_pair(control_points[1].first - control_points[0].first,
-                       control_points[1].second - control_points[0].second);
-    std::pair<int, int> tangent2 =
-        std::make_pair(control_points[2].first - control_points[3].first,
-                       control_points[2].second - control_points[3].second);
+        std::pair<int, int> tangent1 =
+            std::make_pair(control_points[1].first - control_points[0].first,
+                           control_points[1].second - control_points[0].second);
+        std::pair<int, int> tangent2 =
+            std::make_pair(control_points[2].first - control_points[3].first,
+                           control_points[2].second - control_points[3].second);
 
-    geometry_matrix << control_points[0].first, control_points[0].second,
-        control_points[3].first, control_points[3].second, tangent1.first,
-        tangent1.second, tangent2.first, tangent2.second;
-    // clang-format on
+        geometry_matrix << control_points[0].first, control_points[0].second,
+            control_points[3].first, control_points[3].second, tangent1.first,
+            tangent1.second, tangent2.first, tangent2.second;
+    } else {
+        geometry_matrix << control_points[0].first, control_points[0].second,
+            control_points[1].first, control_points[1].second,
+            control_points[2].first, control_points[2].second,
+            control_points[3].first, control_points[3].second;
 
-    // Q = TMG
-    for (double t = 0.0; t <= 1.0; t += 1.0 / spline_subdiv) {
-        t_vec << pow(t, 3), pow(t, 2), t, 1;
-        spline_point = t_vec * basis_matrix * geometry_matrix;
-        spline.conservativeResize(spline.rows() + 1, spline.cols());
-        spline.row(spline.rows() - 1) = spline_point;
+        if (spline_type_ == "Bezier") {
+            basis_matrix << -1, 3, -3, 1, 3, -6, 3, 0, -3, 3, 0, 0, 1, 0, 0, 0;
+        } else if (spline_type_ == "BSpline") {
+            basis_matrix << -1, 3, -3, 1, 3, -6, 3, 0, -3, 0, 3, 0, 1, 4, 1, 0;
+            basis_matrix /= 6;
+        } else if (spline_type_ == "CatmullRom") {
+            basis_matrix << -1, 3, -3, 1, 2, -5, 4, -1, -1, 0, 1, 0, 0, 2, 0, 0;
+            basis_matrix /= 2;
+        } else if (spline_type_ == "MINVO") {
+            basis_matrix << -0.4302, 0.4568, -0.02698, 0.0004103, 0.8349,
+                -0.4568, -0.7921, 0.4996, -0.8349, -0.4568, 0.7921, 0.4996,
+                0.4302, 0.4568, 0.02698, 0.0004103;
+            basis_matrix.transposeInPlace();
+        }
     }
 
-    assert(spline.rows() == spline_subdiv && spline.cols() == 2);
-    return spline;
-}
-
-SplineMatrix ComputeBezier(PairVector& control_points) {
-    assert(control_points.size() == num_control_points);
-
-    Eigen::Matrix<double, 1, 4> t_vec;            // T
-    Eigen::Matrix<double, 4, 4> basis_matrix;     // M
-    Eigen::Matrix<double, 4, 2> geometry_matrix;  // G
-    Eigen::Matrix<double, 1, 2> spline_point;
-    SplineMatrix spline;  // Q
-
-    spline_point << 0, 0;
-
-    // clang-format off
-    basis_matrix << -1, 3, -3, 1,
-                    3, -6, 3, 0,
-                    -3, 3, 0, 0,
-                    1, 0, 0, 0;
-
-    geometry_matrix <<
-        control_points[0].first, control_points[0].second,
-        control_points[1].first, control_points[1].second,
-        control_points[2].first, control_points[2].second,
-        control_points[3].first, control_points[3].second;
-    // clang-format on
-
     // Q = TMG
-    for (double t = 0.0; t <= 1.0; t += 1.0 / spline_subdiv) {
-        t_vec << pow(t, 3), pow(t, 2), t, 1;
-        spline_point = t_vec * basis_matrix * geometry_matrix;
-        spline.conservativeResize(spline.rows() + 1, spline.cols());
-        spline.row(spline.rows() - 1) = spline_point;
+    if (spline_type_ == "MINVO")
+        for (double t = -1.0; t <= 1.0; t += 1.0 / spline_subdiv) {
+            t_vec << pow(t, 3), pow(t, 2), t, 1;
+            spline_point = t_vec * basis_matrix * geometry_matrix;
+            spline.conservativeResize(spline.rows() + 1, spline.cols());
+            spline.row(spline.rows() - 1) = spline_point;
+        }
+    else {
+        for (double t = 0.0; t <= 1.0; t += 1.0 / spline_subdiv) {
+            t_vec << pow(t, 3), pow(t, 2), t, 1;
+            spline_point = t_vec * basis_matrix * geometry_matrix;
+            spline.conservativeResize(spline.rows() + 1, spline.cols());
+            spline.row(spline.rows() - 1) = spline_point;
+        }
     }
-
-    assert(spline.rows() == spline_subdiv && spline.cols() == 2);
-    return spline;
-}
-
-SplineMatrix ComputeBSpline(PairVector& control_points) {
-    assert(control_points.size() == num_control_points);
-
-    Eigen::Matrix<double, 1, 4> t_vec;            // T
-    Eigen::Matrix<double, 4, 4> basis_matrix;     // M
-    Eigen::Matrix<double, 4, 2> geometry_matrix;  // G
-    Eigen::Matrix<double, 1, 2> spline_point;
-    SplineMatrix spline;  // Q
-
-    spline_point << 0, 0;
-
-    // clang-format off
-    basis_matrix << -1, 3, -3, 1,
-                    3, -6, 3, 0,
-                    -3, 0, 3, 0,
-                    1, 4, 1, 0;
-    basis_matrix /= 6;
-
-    geometry_matrix <<
-        control_points[0].first, control_points[0].second,
-        control_points[1].first, control_points[1].second,
-        control_points[2].first, control_points[2].second,
-        control_points[3].first, control_points[3].second;
-    // clang-format on
-
-    // Q = TMG
-    for (double t = 0.0; t <= 1.0; t += 1.0 / spline_subdiv) {
-        t_vec << pow(t, 3), pow(t, 2), t, 1;
-        spline_point = t_vec * basis_matrix * geometry_matrix;
-        spline.conservativeResize(spline.rows() + 1, spline.cols());
-        spline.row(spline.rows() - 1) = spline_point;
-    }
-
-    assert(spline.rows() == spline_subdiv && spline.cols() == 2);
-    return spline;
-}
-
-SplineMatrix ComputeCatmullRom(PairVector& control_points) {
-    assert(control_points.size() == num_control_points);
-
-    Eigen::Matrix<double, 1, 4> t_vec;            // T
-    Eigen::Matrix<double, 4, 4> basis_matrix;     // M
-    Eigen::Matrix<double, 4, 2> geometry_matrix;  // G
-    Eigen::Matrix<double, 1, 2> spline_point;
-    SplineMatrix spline;  // Q
-
-    spline_point << 0, 0;
-
-    // clang-format off
-    basis_matrix << -1, 3, -3, 1,
-                    2, -5, 4, -1,
-                    -1, 0, 1, 0,
-                    0, 2, 0, 0;
-    basis_matrix /= 2;
-
-    geometry_matrix <<
-        control_points[0].first, control_points[0].second,
-        control_points[1].first, control_points[1].second,
-        control_points[2].first, control_points[2].second,
-        control_points[3].first, control_points[3].second;
-    // clang-format on
-
-    // Q = TMG
-    for (double t = 0.0; t <= 1.0; t += 1.0 / spline_subdiv) {
-        t_vec << pow(t, 3), pow(t, 2), t, 1;
-        spline_point = t_vec * basis_matrix * geometry_matrix;
-        spline.conservativeResize(spline.rows() + 1, spline.cols());
-        spline.row(spline.rows() - 1) = spline_point;
-    }
-
-    assert(spline.rows() == spline_subdiv && spline.cols() == 2);
-    return spline;
-}
-
-SplineMatrix ComputeMINVO(PairVector& control_points) {
-    assert(control_points.size() == num_control_points);
-
-    Eigen::Matrix<double, 1, 4> t_vec;            // T
-    Eigen::Matrix<double, 4, 4> basis_matrix;     // M
-    Eigen::Matrix<double, 4, 2> geometry_matrix;  // G
-    Eigen::Matrix<double, 1, 2> spline_point;
-    SplineMatrix spline;  // Q
-
-    spline_point << 0, 0;
-
-    // clang-format off
-    basis_matrix << -0.4302, 0.4568, -0.02698, 0.0004103,
-                    0.8349, -0.4568, -0.7921, 0.4996,
-                    -0.8349, -0.4568, 0.7921, 0.4996,
-                    0.4302, 0.4568, 0.02698, 0.0004103;
-    basis_matrix.transposeInPlace();
-
-    geometry_matrix <<
-        control_points[0].first, control_points[0].second,
-        control_points[1].first, control_points[1].second,
-        control_points[2].first, control_points[2].second,
-        control_points[3].first, control_points[3].second;
-    // clang-format on
-
-    // Q = TMG
-    for (double t = -1.0; t <= 1.0; t += 1.0 / spline_subdiv) {
-        t_vec << pow(t, 3), pow(t, 2), t, 1;
-        spline_point = t_vec * basis_matrix * geometry_matrix;
-        spline.conservativeResize(spline.rows() + 1, spline.cols());
-        spline.row(spline.rows() - 1) = spline_point;
-    }
-
-    assert(spline.rows() == 2 * spline_subdiv && spline.cols() == 2);
     return spline;
 }
 
@@ -370,21 +251,15 @@ void GroupPoints(std::string spline_type_) {
         if (num_points == num_control_points ||
             (num_points - 3 * num_splines == 4)) {
             PairVector control_points = ReturnLastN(points, num_control_points);
-            if (spline_type_ == "Hermite") {
-                splines.push_back(ComputeHermite(control_points));
-            } else {
-                splines.push_back(ComputeBezier(control_points));
-            }
+            splines.push_back(ComputeSplinePoints(control_points, spline_type_,
+                                                  spline_order));
             num_splines++;
         }
     } else if (spline_type_ == "BSpline" || spline_type_ == "CatmullRom") {
         if (num_points >= num_control_points) {
             PairVector control_points = ReturnLastN(points, num_control_points);
-            if (spline_type_ == "BSpline") {
-                splines.push_back(ComputeBSpline(control_points));
-            } else {
-                splines.push_back(ComputeCatmullRom(control_points));
-            }
+            splines.push_back(ComputeSplinePoints(control_points, spline_type_,
+                                                  spline_order));
             num_splines++;
         }
     }
