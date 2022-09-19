@@ -9,12 +9,11 @@
 #include <string>
 #include <vector>
 
-int screen_height = 800;
-int screen_width = 1280;
-int button, state;
+const int screen_height = 800;
+const int screen_width = 1280;
 
-int spline_order = 3;
-int spline_subdiv = 200;
+unsigned int spline_order = 3;
+unsigned int spline_subdiv = 150;
 std::string spline_type = "Hermite";
 
 typedef std::vector<std::pair<int, int>> PairVector;
@@ -58,7 +57,7 @@ void DrawPoint(int x, int y) {
 void DrawText(int x, int y, std::string str) {
     glRasterPos2i(x + 5, y + 5);
     auto cstr = str.c_str();
-    glutBitmapString(GLUT_BITMAP_HELVETICA_12,
+    glutBitmapString(GLUT_BITMAP_9_BY_15,
                      reinterpret_cast<const unsigned char *>(cstr));
 }
 
@@ -69,26 +68,28 @@ void DrawSpline(SplineMatrix spline) {
 
     glBegin(GL_LINE_STRIP);
     for (unsigned int i = 1; i < spline.rows(); i++) {
-        glVertex2i((int)spline(i - 1, 0), (int)spline(i - 1, 1));
-        glVertex2i((int)spline(i, 0), (int)spline(i, 1));
+        glVertex2i(static_cast<int>(spline(i - 1, 0)),
+                   static_cast<int>(spline(i - 1, 1)));
+        glVertex2i(static_cast<int>(spline(i, 0)),
+                   static_cast<int>(spline(i, 1)));
     }
     glEnd();
 }
 
-void DrawConvexHull(std::string spline_type) {
+void DrawConvexHull(std::string spline_type_) {
     glColor4f(0.2f, 0.2f, 0.5f, 0.2f);
-    if (spline_type == "Hermite" || spline_type == "Bezier") {
+    if (spline_type_ == "Hermite" || spline_type_ == "Bezier") {
         if (num_points >= num_control_points) {
             for (unsigned int i = 0; i < num_splines; i++) {
                 glBegin(GL_POLYGON);
-                for (int j = 0; j < 4; j++) {
+                for (unsigned int j = 0; j < 4; j++) {
                     glVertex2i(points[4 + 3 * i - j - 1].first,
                                points[4 + 3 * i - j - 1].second);
                 }
                 glEnd();
             }
         }
-    } else if (spline_type == "BSpline" || spline_type == "CatmullRom") {
+    } else if (spline_type_ == "BSpline" || spline_type_ == "CatmullRom") {
         if (num_points >= num_control_points) {
             for (unsigned int i = 0; i < num_splines; i++) {
                 glBegin(GL_POLYGON);
@@ -258,32 +259,32 @@ void EnforceContinuity() {
 }
 
 PairVector ReturnLastN(PairVector coordinates, unsigned int n) {
-    PairVector::const_iterator first =
-        coordinates.begin() + coordinates.size() - n;
-    PairVector::const_iterator last = coordinates.begin() + coordinates.size();
+    unsigned int lenInput = static_cast<unsigned int>(coordinates.size());
+    PairVector::const_iterator first = coordinates.begin() + lenInput - n;
+    PairVector::const_iterator last = coordinates.begin() + lenInput;
     PairVector control_points(first, last);
 
     return control_points;
 }
 
-void GroupPoints(std::string spline_type) {
+void GroupPoints(std::string spline_type_) {
     num_points = points.size();
 
-    if (spline_type == "Hermite" || spline_type == "Bezier") {
+    if (spline_type_ == "Hermite" || spline_type_ == "Bezier") {
         if (num_points == num_control_points ||
             (num_points - 3 * num_splines == 4)) {
             PairVector control_points = ReturnLastN(points, num_control_points);
-            if (spline_type == "Hermite") {
+            if (spline_type_ == "Hermite") {
                 splines.push_back(ComputeHermite(control_points));
             } else {
                 splines.push_back(ComputeBezier(control_points));
             }
             num_splines++;
         }
-    } else if (spline_type == "BSpline" || spline_type == "CatmullRom") {
+    } else if (spline_type_ == "BSpline" || spline_type_ == "CatmullRom") {
         if (num_points >= num_control_points) {
             PairVector control_points = ReturnLastN(points, num_control_points);
-            if (spline_type == "BSpline") {
+            if (spline_type_ == "BSpline") {
                 splines.push_back(ComputeBSpline(control_points));
             } else {
                 splines.push_back(ComputeCatmullRom(control_points));
@@ -325,7 +326,7 @@ void ProcessMouse(int button, int state, int x, int y) {
     y = screen_height - y;
     if ((state == GLUT_UP) && (button == GLUT_LEFT_BUTTON)) {
         points.push_back(std::pair(x, y));
-        std::cout << "Insert Point\t\t"
+        std::cout << "Insert Point " << points.size() << "\t\t"
                   << "(" << x << ", " << y << ")" << std::endl;
         GroupPoints(spline_type);
     }
@@ -333,8 +334,8 @@ void ProcessMouse(int button, int state, int x, int y) {
 
 void ProcessMouseActiveMotion(int x, int y) {
     // drag motion
-    if ((state == GLUT_DOWN) && (button == GLUT_LEFT_BUTTON)) {
-    }
+    // if ((state == GLUT_DOWN) && (button == GLUT_LEFT_BUTTON)) {
+    // }
 }
 
 bool CheckArgSplineType(std::vector<std::string> args) {
@@ -342,10 +343,11 @@ bool CheckArgSplineType(std::vector<std::string> args) {
     auto checkSplineType =
         std::find(std::begin(args), std::end(args), "--spline_type");
     if (checkSplineType != std::end(args)) {
-        spline_type = *(++checkSplineType);
-        if (spline_type == "Hermite" || spline_type == "Bezier" ||
-            spline_type == "BSpline" || spline_type == "CatmullRom") {
+        std::string spline_type_ = *(++checkSplineType);
+        if (spline_type_ == "Hermite" || spline_type_ == "Bezier" ||
+            spline_type_ == "BSpline" || spline_type_ == "CatmullRom") {
             valid = true;
+            spline_type = spline_type_;
         } else {
             std::cout
                 << "Invalid argument --spline_type {Hermite, Bezier, BSpline, "
@@ -370,7 +372,7 @@ void CheckArgConvexHull(std::vector<std::string> args) {
 
 int main(int argc, char *argv[]) {
     std::vector<std::string> args(argv, argv + argc);
-    if(CheckArgSplineType(args) == false) return EXIT_FAILURE;
+    if (CheckArgSplineType(args) == false) return EXIT_FAILURE;
     CheckArgConvexHull(args);
 
     glutInit(&argc, argv);
