@@ -308,6 +308,61 @@ void ProcessMouse(int button, int state, int x, int y) {
     }
 }
 
+void RemoveAllPoints() {
+    std::cout << "Remove all inserted points" << std::endl;
+    points.clear();
+    splines.clear();
+    num_points = 0;
+    num_splines = 0;
+}
+
+void RemovePrevPoint() {
+    std::cout << "Remove Point " << num_points << std::endl;
+    points.pop_back();
+    num_points--;
+    if (spline_type == "Hermite" || spline_type == "Bezier" ||
+        spline_type == "MINVO") {
+        if (num_points == num_control_points - 1 ||
+            ((num_points - num_control_points) % spline_order ==
+                 (spline_order - 1) &&
+             num_points >= num_control_points)) {
+            num_splines--;
+            splines.pop_back();
+        }
+    } else {
+        if (num_points >= num_control_points - 1) {
+            splines.pop_back();
+            num_splines--;
+        }
+    }
+}
+
+void ProcessNormalKeyPress(unsigned char key, int x, int y) {
+    // keyboard input (normal keys)
+    switch (key) {
+        case 'r':
+            RemovePrevPoint();
+            break;
+        default:
+            break;
+    }
+}
+
+void ProcessSpecialKeyPress(int key, int x, int y) {
+    // keyboard input (special keys)
+    switch (key) {
+        case GLUT_KEY_F1:
+            RemoveAllPoints();
+            break;
+        default:
+            break;
+    }
+}
+
+void ProcessKeyRelease(int key, int x, int y) {
+    // keyboard release
+}
+
 void ProcessMouseActiveMotion(int x, int y) {
     // drag motion
     // if ((state == GLUT_DOWN) && (button == GLUT_LEFT_BUTTON)) {
@@ -359,6 +414,10 @@ int main(int argc, char* argv[]) {
 
     glutMouseFunc(ProcessMouse);
     glutMotionFunc(ProcessMouseActiveMotion);
+
+    glutIgnoreKeyRepeat(1);
+    glutKeyboardFunc(ProcessNormalKeyPress);
+    glutSpecialFunc(ProcessSpecialKeyPress);
 
     glutMainLoop();
     return EXIT_SUCCESS;
