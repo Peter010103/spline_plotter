@@ -78,47 +78,54 @@ void DrawSpline(SplineMatrix& spline) {
 
 void DrawConvexHull(std::string spline_type_, unsigned int style = 0) {
     if (num_points >= num_control_points) {
-        if (style == 1) {
-            glPushAttrib(GL_ENABLE_BIT);
-            glLineStipple(4, 0xAAAA);
-            glEnable(GL_LINE_STIPPLE);
-            glColor3f(0.0f, 0.0f, 0.0f);
-            glLineWidth(1.5f);
-            glBegin(GL_LINES);
+        switch (style) {
+            case (1):
+                glPushAttrib(GL_ENABLE_BIT);
+                glLineStipple(4, 0xAAAA);
+                glEnable(GL_LINE_STIPPLE);
+                glColor3f(0.0f, 0.0f, 0.0f);
+                glLineWidth(1.5f);
+                glBegin(GL_LINES);
 
-            for (unsigned int i = 0; i < num_points - 1; i++) {
-                glVertex2i(points[i].first, points[i].second);
-                glVertex2i(points[i + 1].first, points[i + 1].second);
-            }
-            glEnd();
-            glPopAttrib();
-        } else if (style == 2) {
-            if (spline_type_ == "Hermite" || spline_type_ == "Bezier" ||
-                spline_type == "MINVO") {
-                for (unsigned int i = 0; i < num_splines; i++) {
-                    glPushAttrib(GL_ENABLE_BIT);
-                    glColor4f(0.2f, 0.2f, 0.5f, 0.2f);
-                    glBegin(GL_POLYGON);
-
-                    for (unsigned int j = 0; j < 4; j++) {
-                        glVertex2i(points[4 + 3 * i - j - 1].first,
-                                   points[4 + 3 * i - j - 1].second);
-                    }
-                    glPopAttrib();
-                    glEnd();
+                for (unsigned int i = 0; i < num_points - 1; i++) {
+                    glVertex2i(points[i].first, points[i].second);
+                    glVertex2i(points[i + 1].first, points[i + 1].second);
                 }
-            } else if (spline_type_ == "BSpline" ||
-                       spline_type_ == "CatmullRom") {
-                for (unsigned int i = 0; i < num_splines; i++) {
-                    glColor4f(0.2f, 0.2f, 0.5f, 0.2f);
-                    glBegin(GL_POLYGON);
-                    for (unsigned int j = 0; j < 4; j++) {
-                        glVertex2i(points[4 + i - j - 1].first,
-                                   points[4 + i - j - 1].second);
+                glEnd();
+                glPopAttrib();
+                break;
+            case (2):
+                if (spline_type_ == "Hermite" || spline_type_ == "Bezier" ||
+                    spline_type == "MINVO") {
+                    for (unsigned int i = 0; i < num_splines; i++) {
+                        glPushAttrib(GL_ENABLE_BIT);
+                        glColor4f(0.2f, 0.5f, 0.2f, 0.2f);
+                        glBegin(GL_POLYGON);
+
+                        for (unsigned int j = 0; j < 4; j++) {
+                            glVertex2i(points[4 + 3 * i - j - 1].first,
+                                       points[4 + 3 * i - j - 1].second);
+                        }
+                        glPopAttrib();
+                        glEnd();
+                    }
+                } else if (spline_type_ == "BSpline" ||
+                           spline_type_ == "CatmullRom") {
+                    for (unsigned int i = 0; i < num_splines; i++) {
+                        glPushAttrib(GL_ENABLE_BIT);
+                        glColor4f(0.2f, 0.5f, 0.2f, 0.2f);
+                        glBegin(GL_POLYGON);
+                        for (unsigned int j = 0; j < 4; j++) {
+                            glVertex2i(points[4 + i - j - 1].first,
+                                       points[4 + i - j - 1].second);
+                        }
+                        glPopAttrib();
                         glEnd();
                     }
                 }
-            }
+                break;
+            default:
+                break;
         }
     }
 }
@@ -231,7 +238,6 @@ void EnforceContinuity(PairVector& coordinates, unsigned int GCont_,
 
             prevDir = prevDir.normalized();
             newPoint = (currDir.dot(prevDir)) * prevDir + prevPoint;
-            // newPoint = newPoint.template cast<>
             newPoint(0) = static_cast<int>(newPoint(0));
             newPoint(1) = static_cast<int>(newPoint(1));
 
@@ -268,6 +274,7 @@ void GroupPoints(std::string spline_type_) {
 void RenderScene(void) {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+    // Convex Hull drawn in first "layer" below points and splines
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glEnable(GL_BLEND);
     if (showConvexHull) DrawConvexHull(spline_type, showConvexHull);
