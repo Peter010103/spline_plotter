@@ -29,7 +29,7 @@ unsigned int num_control_points = spline_order + 1;
 
 unsigned int showConvexHull = 0;
 unsigned int GCont = 1;
-unsigned int CCont = 0;
+unsigned int CCont = 1;
 
 void CreateScreen() {
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA);
@@ -252,8 +252,12 @@ void EnforceContinuity(PairVector& coordinates, unsigned int GCont_,
                 coordinates[num_points - 1 - 1].first),
                 static_cast<double>(coordinates[num_points - 1 - 1].second);
 
+            double vel = currDir.dot(prevDir);
+            // Enforce C1 continuity
+            if (CCont_ == 1) vel = prevDir.norm();
+
             prevDir = prevDir.normalized();
-            newPoint = (currDir.dot(prevDir)) * prevDir + prevPoint;
+            newPoint = vel * prevDir + prevPoint;
             newPoint(0) = static_cast<int>(newPoint(0));
             newPoint(1) = static_cast<int>(newPoint(1));
 
