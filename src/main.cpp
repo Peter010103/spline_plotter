@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 #include <iostream>
+#include <fmt/format.h>
 #include <string>
 #include <vector>
 
@@ -28,7 +29,7 @@ unsigned int num_control_points = spline_order + 1;
 
 unsigned int showConvexHull = 0;
 unsigned int GCont = 1;
-unsigned int CCont = 1;
+unsigned int CCont = 0;
 
 void CreateScreen() {
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA);
@@ -54,10 +55,11 @@ void DrawPoint(int x, int y) {
     glEnd();
 }
 
-void DrawText(int x, int y, std::string str) {
+void DrawText(int x, int y, std::string str, void* font = GLUT_BITMAP_9_BY_15) {
+    glColor3f(0.0f, 0.0f, 0.0f);
     glRasterPos2i(x + 5, y + 5);
     auto cstr = str.c_str();
-    glutBitmapString(GLUT_BITMAP_9_BY_15,
+    glutBitmapString(font,
                      reinterpret_cast<const unsigned char*>(cstr));
 }
 
@@ -128,6 +130,20 @@ void DrawConvexHull(std::string spline_type_, unsigned int style = 0) {
                 break;
         }
     }
+}
+
+void DisplayData(std::string spline_type_, unsigned int num_points_, unsigned int CCont_, unsigned int GCont_) {
+    auto font = GLUT_BITMAP_HELVETICA_12;
+
+    std::string display_spline_type = "Spline type: " + spline_type_;
+    DrawText(10, screen_height - 30 - 25 * 0, display_spline_type, font);
+
+    std::string display_points = fmt::format("Number of points: {}", num_points_);
+    DrawText(10, screen_height - 30 - 25 * 1, display_points, font);
+
+    std::string display_cont = fmt::format("Continuity: C{}, G{}", CCont_, GCont_);
+    DrawText(10, screen_height - 30 - 25 * 2, display_cont, font);
+
 }
 
 SplineMatrix ComputeSplinePoints(PairVector& control_points,
@@ -290,6 +306,8 @@ void RenderScene(void) {
     for (SplineMatrix spline : splines) {
         DrawSpline(spline);
     }
+
+    DisplayData(spline_type, num_points, CCont, GCont);
 
     glFlush();
     glutSwapBuffers();
