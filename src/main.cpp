@@ -1,19 +1,19 @@
 #include <GL/freeglut.h>
 #include <GL/gl.h>
 #include <GL/glut.h>
+#include <fmt/format.h>
 
-#include <Eigen/Dense>
+#include <Eigen/Core>
 #include <algorithm>
 #include <cmath>
 #include <iostream>
-#include <fmt/format.h>
 #include <string>
 #include <vector>
 
 const int screen_height = 800;
 const int screen_width = 1280;
 
-unsigned int spline_order = 3;
+unsigned int spline_degree = 3;  // p
 unsigned int spline_subdiv = 150;
 std::string spline_type = "Hermite";
 
@@ -25,7 +25,7 @@ std::vector<SplineMatrix> splines;
 
 unsigned int num_points = 0;
 unsigned int num_splines = 0;
-unsigned int num_control_points = spline_order + 1;
+unsigned int num_control_points = spline_degree + 1;
 
 unsigned int showConvexHull = 0;
 unsigned int GCont = 1;
@@ -59,8 +59,7 @@ void DrawText(int x, int y, std::string str, void* font = GLUT_BITMAP_9_BY_15) {
     glColor3f(0.0f, 0.0f, 0.0f);
     glRasterPos2i(x + 5, y + 5);
     auto cstr = str.c_str();
-    glutBitmapString(font,
-                     reinterpret_cast<const unsigned char*>(cstr));
+    glutBitmapString(font, reinterpret_cast<const unsigned char*>(cstr));
 }
 
 void DrawSpline(SplineMatrix& spline) {
@@ -78,7 +77,8 @@ void DrawSpline(SplineMatrix& spline) {
     glEnd();
 }
 
-void DrawConvexHull(std::string spline_type_, unsigned int style = 0) {
+void DrawSimplex(std::string spline_type_, unsigned int style = 0) {
+    // Draw lines or polygons to illustrate the simplex ("control polygon")
     if (num_points >= num_control_points) {
         switch (style) {
             case (1):
@@ -127,39 +127,47 @@ void DrawConvexHull(std::string spline_type_, unsigned int style = 0) {
                 }
                 break;
             default:
+                std::cout << "Invalid convex hull plotting option" << std::endl;
                 break;
         }
     }
 }
 
-void DisplayData(std::string spline_type_, unsigned int num_points_, unsigned int CCont_, unsigned int GCont_) {
+void DisplayData(std::string spline_type_, unsigned int num_points_,
+                 unsigned int CCont_, unsigned int GCont_) {
     auto font = GLUT_BITMAP_HELVETICA_12;
 
     std::string display_spline_type = "Spline type: " + spline_type_;
     DrawText(10, screen_height - 30 - 25 * 0, display_spline_type, font);
 
-    std::string display_points = fmt::format("Number of points: {}", num_points_);
+    std::string display_points =
+        fmt::format("Number of points: {}", num_points_);
     DrawText(10, screen_height - 30 - 25 * 1, display_points, font);
 
-    std::string display_cont = fmt::format("Continuity: C{}, G{}", CCont_, GCont_);
+    std::string display_cont =
+        fmt::format("Continuity: C{}, G{}", CCont_, GCont_);
     DrawText(10, screen_height - 30 - 25 * 2, display_cont, font);
+}
 
 }
 
-SplineMatrix ComputeSplinePoints(PairVector& control_points,
-                                 std::string spline_type_,
-                                 unsigned int spline_order_) {
-    int num_control_points_ = static_cast<int>(spline_order_) + 1;
+
+SplineMatrix ComputeSpline(PairVector& control_points, std::string spline_type_,
+                           unsigned int spline_degree_,
+                           unsigned int derivative) {
+    int num_control_points_ = static_cast<int>(spline_degree_) + 1;
     assert(static_cast<int>(control_points.size()) == num_control_points_);
 
-    Eigen::Matrix<double, 1, -1> t_vec(1, num_control_points_);  // T
+    // declare dynamic size matrices as size not known at compile time
+    // allocate array of coefficients with constructors that take size
+    // allocates on the heap
+    SplineMatrix spline;                                             // Q
+    Eigen::Matrix<double, 1, -1> param_vec(1, num_control_points_);  // T^(p)
     Eigen::Matrix<double, -1, -1> basis_matrix(num_control_points_,
                                                num_control_points_);        // M
     Eigen::Matrix<double, -1, -1> geometry_matrix(num_control_points_, 2);  // G
-    Eigen::Matrix<double, 1, 2> spline_point;
-    SplineMatrix spline;  // Q
 
-    spline_point << 0, 0;
+    Eigen::Matrix<double, 1, 2> spline_point(0.0, 0.0);
 
     if (spline_type_ == "Hermite") {
         basis_matrix << 2, -2, 1, 1, -3, 3, -2, -1, 0, 0, 1, 0, 1, 0, 0, 0;
@@ -217,9 +225,9 @@ SplineMatrix ComputeSplinePoints(PairVector& control_points,
 
 PairVector ReturnLastN(PairVector& coordinates, unsigned int n) {
     unsigned int lenInput = static_cast<unsigned int>(coordinates.size());
-    PairVector::const_iterator first = coordinates.begin() + lenInput - n;
+    PairVector::const_iterator init = coordinates.begin() + lenInput - n;
     PairVector::const_iterator last = coordinates.begin() + lenInput;
-    PairVector control_points(first, last);
+    PairVector control_points(init, last);
 
     return control_points;
 }
@@ -297,7 +305,7 @@ void RenderScene(void) {
     // Convex Hull drawn in first "layer" below points and splines
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glEnable(GL_BLEND);
-    if (showConvexHull) DrawConvexHull(spline_type, showConvexHull);
+    if (showConvexHull) DrawSimplex(spline_type, showConvexHull);
 
     int i = 1;
     for (std::pair<int, int> point : points) {
