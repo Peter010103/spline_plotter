@@ -204,21 +204,32 @@ SplineMatrix ComputeSpline(PairVector& control_points, std::string spline_type_,
         }
     }
 
+    double t_range[2] = {0.0, 1.0};
+    if (spline_type_ == "MINVO") t_range[0] = -1.0;
+
     // Q = TMG
-    if (spline_type_ == "MINVO")
-        for (double t = -1.0; t <= 1.0; t += 1.0 / spline_subdiv) {
-            t_vec << pow(t, 3), pow(t, 2), t, 1;
-            spline_point = t_vec * basis_matrix * geometry_matrix;
-            spline.conservativeResize(spline.rows() + 1, spline.cols());
-            spline.row(spline.rows() - 1) = spline_point;
+    for (double t = t_range[0]; t <= t_range[1]; t += 1.0 / spline_subdiv) {
+        for (unsigned int i = spline_degree_; spline_degree_ >= i; i--) {
+            switch (derivative) {
+                case 0:  // compute points of the spline
+                    param_vec(i) = pow(t, i);
+                    break;
+                case 1:  // compute parametric velocity
+                    param_vec(i) = i * pow(t, i - 1);
+                    break;
+                case 2:  // compute parametric acceleration
+                    i*(i - 1) * pow(t, i - 2);
+                    break;
+                default:
+                    std::cout << "Choose from derivatives = {0, 1, 2}"
+                              << std::endl;
+                    break;
+            }
         }
-    else {
-        for (double t = 0.0; t <= 1.0; t += 1.0 / spline_subdiv) {
-            t_vec << pow(t, 3), pow(t, 2), t, 1;
-            spline_point = t_vec * basis_matrix * geometry_matrix;
-            spline.conservativeResize(spline.rows() + 1, spline.cols());
-            spline.row(spline.rows() - 1) = spline_point;
-        }
+        param_vec.reverseInPlace();  // t parameter ordered in descending powers
+        spline_point = param_vec * basis_matrix * geometry_matrix;
+        spline.conservativeResize(spline.rows() + 1, spline.cols());
+        spline.row(spline.rows() - 1) = spline_point;
     }
     return spline;
 }
@@ -240,9 +251,9 @@ void EnforceContinuity(PairVector& coordinates, unsigned int GCont_,
     Eigen::Vector2d newPoint;
 
     // Enforce G1 continuity
-    if (GCont_ == 1 && (spline_type == "Hermite" || spline_type == "Bezier" ||
-                        spline_type == "MINVO")) {
-        if (num_points % 3 == 2 && num_points > num_control_points) {
+    if (GCont_ == 1 && (spline_type == "Hermite" || spline_type == "Bezier")) {
+        if (num_points % spline_degree == (spline_degree - 1) &&
+            num_points > num_control_points) {
             // indices further reduced by 1 as num_points starts from 1
             prevDir << static_cast<double>(
                 coordinates[num_points - 1 - 1].first -
@@ -282,18 +293,18 @@ void EnforceContinuity(PairVector& coordinates, unsigned int GCont_,
 void GroupPoints(std::string spline_type_) {
     if (spline_type_ == "Hermite" || spline_type_ == "Bezier" ||
         spline_type == "MINVO") {
-        if (num_points == num_control_points ||
-            (num_points - 3 * num_splines == 4)) {
+        if (num_points >= num_control_points &&
+            (num_points - num_control_points) % spline_degree == 0) {
             PairVector control_points = ReturnLastN(points, num_control_points);
-            splines.push_back(ComputeSplinePoints(control_points, spline_type_,
-                                                  spline_order));
+            splines.push_back(
+                ComputeSpline(control_points, spline_type_, spline_degree, 0));
             num_splines++;
         }
     } else if (spline_type_ == "BSpline" || spline_type_ == "CatmullRom") {
         if (num_points >= num_control_points) {
             PairVector control_points = ReturnLastN(points, num_control_points);
-            splines.push_back(ComputeSplinePoints(control_points, spline_type_,
-                                                  spline_order));
+            splines.push_back(
+                ComputeSpline(control_points, spline_type_, spline_degree, 0));
             num_splines++;
         }
     }
@@ -353,8 +364,8 @@ void RemovePrevPoint() {
     if (spline_type == "Hermite" || spline_type == "Bezier" ||
         spline_type == "MINVO") {
         if (num_points == num_control_points - 1 ||
-            ((num_points - num_control_points) % spline_order ==
-                 (spline_order - 1) &&
+            ((num_points - num_control_points) % spline_degree ==
+                 (spline_degree - 1) &&
              num_points >= num_control_points)) {
             num_splines--;
             splines.pop_back();
