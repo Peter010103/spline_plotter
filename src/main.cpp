@@ -168,8 +168,8 @@ SplineMatrix ComputeSplinePoints(PairVector& control_points,
             std::make_pair(control_points[1].first - control_points[0].first,
                            control_points[1].second - control_points[0].second);
         std::pair<int, int> tangent2 =
-            std::make_pair(control_points[2].first - control_points[3].first,
-                           control_points[2].second - control_points[3].second);
+            std::make_pair(control_points[3].first - control_points[2].first,
+                           control_points[3].second - control_points[2].second);
 
         geometry_matrix << control_points[0].first, control_points[0].second,
             control_points[3].first, control_points[3].second, tangent1.first,
