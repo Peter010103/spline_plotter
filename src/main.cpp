@@ -28,8 +28,8 @@ unsigned int num_splines = 0;
 unsigned int num_control_points = spline_degree + 1;
 
 unsigned int showConvexHull = 0;
-unsigned int GCont = 1;
-unsigned int CCont = 1;
+unsigned int GCont = 0;
+unsigned int CCont = 0;
 
 void CreateScreen() {
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA);
@@ -148,9 +148,6 @@ void DisplayData(std::string spline_type_, unsigned int num_points_,
         fmt::format("Continuity: C{}, G{}", CCont_, GCont_);
     DrawText(10, screen_height - 30 - 25 * 2, display_cont, font);
 }
-
-}
-
 
 SplineMatrix ComputeSpline(PairVector& control_points, std::string spline_type_,
                            unsigned int spline_degree_,
@@ -271,7 +268,7 @@ void EnforceContinuity(PairVector& coordinates, unsigned int GCont_,
                 coordinates[num_points - 1 - 1].first),
                 static_cast<double>(coordinates[num_points - 1 - 1].second);
 
-            double vel = currDir.dot(prevDir);
+            double vel = currDir.dot(prevDir.normalized());
             // Enforce C1 continuity
             if (CCont_ == 1) vel = prevDir.norm();
 
@@ -336,19 +333,6 @@ void RenderScene(void) {
     glutSwapBuffers();
 }
 
-void ProcessMouse(int button, int state, int x, int y) {
-    // click motion
-    y = screen_height - y;
-    if ((state == GLUT_UP) && (button == GLUT_LEFT_BUTTON)) {
-        points.push_back(std::pair(x, y));
-        num_points = points.size();
-        std::cout << "Insert Point " << num_points << "\t\t"
-                  << "(" << x << ", " << y << ")" << std::endl;
-        EnforceContinuity(points, GCont, CCont);
-        GroupPoints(spline_type);
-    }
-}
-
 void RemoveAllPoints() {
     std::cout << "Remove all inserted points" << std::endl;
     points.clear();
@@ -404,6 +388,19 @@ void ProcessKeyRelease(int key, int x, int y) {
     // keyboard release
 }
 
+void ProcessMouse(int button, int state, int x, int y) {
+    // click motion
+    y = screen_height - y;
+    if ((state == GLUT_UP) && (button == GLUT_LEFT_BUTTON)) {
+        points.push_back(std::pair(x, y));
+        num_points = points.size();
+        std::cout << "Insert Point " << num_points << "\t\t"
+                  << "(" << x << ", " << y << ")" << std::endl;
+        EnforceContinuity(points, GCont, CCont);
+        GroupPoints(spline_type);
+    }
+}
+
 void ProcessMouseActiveMotion(int x, int y) {
     // drag motion
     // if ((state == GLUT_DOWN) && (button == GLUT_LEFT_BUTTON)) {
@@ -443,10 +440,55 @@ void CheckArgConvexHull(std::vector<std::string> args) {
     }
 }
 
+void CheckArgContinuity(std::vector<std::string> args) {
+    bool C2_spline = (spline_type == "BSpline" || spline_type == "CatmullRom");
+
+    if (C2_spline) {
+        std::cout << "C2 spline chosen: setting continuity C2, G2" << std::endl;
+        CCont = 2, GCont = 2;
+    } else {
+        auto checkGCont =
+            std::find(std::begin(args), std::end(args), "--GCont");
+        auto checkCCont =
+            std::find(std::begin(args), std::end(args), "--CCont");
+
+        if (checkCCont != std::end(args)) {
+            CCont = std::stoul(*(++checkCCont));
+            if (checkGCont != std::end(args)) {
+                GCont = std::stoul(*(++checkGCont));
+            }
+            if (GCont > CCont) {
+                std::cout << "Invalid continuity specified (GCont > CCont): "
+                             "setting GCont = CCont"
+                          << std::endl;
+                GCont = CCont;
+            }
+            std::cout << fmt::format("Setting continuity C{}, G{}", CCont,
+                                     GCont)
+                      << std::endl;
+        } else if (checkGCont != std::end(args)) {
+            GCont = std::stoul(*(++checkGCont));
+            std::cout << fmt::format("Setting continuity C{}, G{}", CCont,
+                                     GCont)
+                      << std::endl;
+        } else {
+            std::cout << "--CCont not specified. Defaulting to C0, G0"
+                      << std::endl;
+            CCont = 0;
+            GCont = 0;
+        }
+    }
+    std::cout << std::endl;
+}
+
 int main(int argc, char* argv[]) {
     std::vector<std::string> args(argv, argv + argc);
+    // required arguments
     if (CheckArgSplineType(args) == false) return EXIT_FAILURE;
+
+    // optional arguments
     CheckArgConvexHull(args);
+    CheckArgContinuity(args);
 
     glutInit(&argc, argv);
     CreateScreen();
