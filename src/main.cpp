@@ -383,11 +383,37 @@ void RemovePrevPoint() {
     }
 }
 
+void ExportData(std::vector<SplineMatrix>& allSplineSegments,
+                bool printTimeStamp = true) {
+    static int count = 0;
+    auto now = std::chrono::system_clock::now();
+    auto UTC = std::chrono::duration_cast<std::chrono::seconds>(
+        now.time_since_epoch());
+
+    std::filesystem::create_directory("results");
+    Eigen::IOFormat printFmt(Eigen::FullPrecision, 0, ", ", "\n", "", "");
+
+    std::string filename =
+        fmt::format("results/splines_{}_{}", spline_type, count);
+    if (printTimeStamp) filename += "_" + std::to_string(UTC.count());
+    filename += ".csv";
+    std::ofstream output(filename);
+    count++;
+
+    for (const SplineMatrix& spline : allSplineSegments) {
+        output << spline.format(printFmt) << std::endl;
+    }
+    output.close();
+}
+
 void ProcessNormalKeyPress(unsigned char key, int x, int y) {
     // keyboard input (normal keys)
     switch (key) {
         case 'r':
             RemovePrevPoint();
+            break;
+        case 'e':
+            ExportData(splines);
             break;
         default:
             break;
