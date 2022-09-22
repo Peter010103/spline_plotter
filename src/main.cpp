@@ -5,7 +5,10 @@
 
 #include <Eigen/Core>
 #include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -104,9 +107,13 @@ void DrawSimplex(std::string spline_type_, unsigned int style = 0) {
                         glColor4f(0.2f, 0.5f, 0.2f, 0.2f);
                         glBegin(GL_POLYGON);
 
-                        for (unsigned int j = 0; j < 4; j++) {
-                            glVertex2i(points[4 + 3 * i - j - 1].first,
-                                       points[4 + 3 * i - j - 1].second);
+                        for (unsigned int j = 0; j < num_control_points; j++) {
+                            glVertex2i(points[num_control_points +
+                                              spline_degree * i - j - 1]
+                                           .first,
+                                       points[num_control_points +
+                                              spline_degree * i - j - 1]
+                                           .second);
                         }
                         glPopAttrib();
                         glEnd();
@@ -117,9 +124,10 @@ void DrawSimplex(std::string spline_type_, unsigned int style = 0) {
                         glPushAttrib(GL_ENABLE_BIT);
                         glColor4f(0.2f, 0.5f, 0.2f, 0.2f);
                         glBegin(GL_POLYGON);
-                        for (unsigned int j = 0; j < 4; j++) {
-                            glVertex2i(points[4 + i - j - 1].first,
-                                       points[4 + i - j - 1].second);
+                        for (unsigned int j = 0; j < num_control_points; j++) {
+                            glVertex2i(
+                                points[num_control_points + i - j - 1].first,
+                                points[num_control_points + i - j - 1].second);
                         }
                         glPopAttrib();
                         glEnd();
@@ -155,7 +163,7 @@ SplineMatrix ComputeSpline(PairVector& control_points, std::string spline_type_,
     int num_control_points_ = static_cast<int>(spline_degree_) + 1;
     assert(static_cast<int>(control_points.size()) == num_control_points_);
 
-    // declare dynamic size matrices as size not known at compile time
+    // declare dynamic size matrices as spline degree not known at compile time
     // allocate array of coefficients with constructors that take size
     // allocates on the heap
     SplineMatrix spline;                                             // Q
@@ -240,6 +248,20 @@ PairVector ReturnLastN(PairVector& coordinates, unsigned int n) {
     return control_points;
 }
 
+unsigned int ReturnPointIndex(std::string spline_type_) {
+    unsigned int index = num_points;
+
+    if (num_points >= num_control_points) {
+        if (spline_type_ == "Hermite" || spline_type_ == "Bezier" ||
+            spline_type_ == "MINVO") {
+            index = (num_points - 1) % spline_degree;
+        } else {
+            index = 0;
+        }
+    }
+    return index;
+}
+
 void EnforceContinuity(PairVector& coordinates, unsigned int GCont_,
                        unsigned int CCont_) {
     Eigen::Vector2d prevDir;
@@ -249,7 +271,7 @@ void EnforceContinuity(PairVector& coordinates, unsigned int GCont_,
 
     // Enforce G1 continuity
     if (GCont_ == 1 && (spline_type == "Hermite" || spline_type == "Bezier")) {
-        if (num_points % spline_degree == (spline_degree - 1) &&
+        if (ReturnPointIndex(spline_type) == 1 &&
             num_points > num_control_points) {
             // indices further reduced by 1 as num_points starts from 1
             prevDir << static_cast<double>(
@@ -290,15 +312,14 @@ void EnforceContinuity(PairVector& coordinates, unsigned int GCont_,
 void GroupPoints(std::string spline_type_) {
     if (spline_type_ == "Hermite" || spline_type_ == "Bezier" ||
         spline_type == "MINVO") {
-        if (num_points >= num_control_points &&
-            (num_points - num_control_points) % spline_degree == 0) {
+        if (ReturnPointIndex(spline_type_) == 0) {
             PairVector control_points = ReturnLastN(points, num_control_points);
             splines.push_back(
                 ComputeSpline(control_points, spline_type_, spline_degree, 0));
             num_splines++;
         }
     } else if (spline_type_ == "BSpline" || spline_type_ == "CatmullRom") {
-        if (num_points >= num_control_points) {
+        if (ReturnPointIndex(spline_type_) == 0) {
             PairVector control_points = ReturnLastN(points, num_control_points);
             splines.push_back(
                 ComputeSpline(control_points, spline_type_, spline_degree, 0));
