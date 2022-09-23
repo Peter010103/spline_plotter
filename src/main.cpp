@@ -2,6 +2,7 @@
 #include <GL/gl.h>
 #include <GL/glut.h>
 #include <fmt/format.h>
+#include <math.h>
 
 #include <Eigen/Core>
 #include <algorithm>
@@ -47,6 +48,87 @@ void CreateScreen() {
     gluOrtho2D(0.0, screen_width, 0.0, screen_height);
 }
 
+PairVector ReturnLastNFromM(PairVector& coordinates, unsigned int n,
+                            unsigned int m) {
+    // returns elements of index n to m of the PairVector
+    PairVector control_points(&coordinates[m - n], &coordinates[m]);
+    return control_points;
+}
+
+PairVector ReturnLastN(PairVector& coordinates, unsigned int n) {
+    // returns the last n points of the PairVector
+    unsigned int m = static_cast<unsigned int>(coordinates.size());
+    return ReturnLastNFromM(coordinates, n, m);
+}
+
+unsigned int ReturnPointIndex(std::string spline_type_) {
+    unsigned int index = num_points;
+
+    if (num_points >= num_control_points) {
+        if (spline_type_ == "Hermite" || spline_type_ == "Bezier" ||
+            spline_type_ == "MINVO") {
+            index = (num_points - 1) % spline_degree;
+        } else {
+            index = 0;
+        }
+    }
+    return index;
+}
+
+double ComputePolarAngle(std::pair<int, int> p0, std::pair<int, int> p1) {
+    double polar_angle;
+    double dy = p0.second - p1.second;
+    double dx = p0.first - p1.first;
+
+    if (dy != 0)
+        polar_angle = atan2(dy, dx);
+    else
+        polar_angle = -M_PI;
+    return polar_angle;
+}
+
+int CheckCCW(std::pair<int, int> p0, std::pair<int, int> p1,
+             std::pair<int, int> p2) {
+    // Check whether p2 lies left of line segment p0-p1 with cross product
+    return (p1.first - p0.first) * (p2.second - p0.second) -
+           (p2.first - p0.first) * (p1.second - p0.second);
+}
+
+PairVector SortConvex(PairVector& control_points) {
+    // Graham Scan convex sorting algorithm
+    if (control_points.size() < 3)
+        throw std::invalid_argument("number of control points less than 3");
+    PairVector sorted_points;
+
+    // STEP 1: Find the bottom left point
+    std::pair<int, int> bl_point = control_points[0];
+    for (auto point : control_points) {
+        if ((point.second < bl_point.second) ||
+            (point.second == bl_point.second && point.first < bl_point.first))
+            bl_point = point;
+    }
+
+    // STEP 2: Sort the points by ascending polar angle with bl_point
+    std::sort(control_points.begin(), control_points.end(),
+              [bl_point](std::pair<int, int>& p0, std::pair<int, int>& p1) {
+                  double angle0 = ComputePolarAngle(bl_point, p0);
+                  double angle1 = ComputePolarAngle(bl_point, p1);
+                  return angle0 < angle1;
+              });
+
+    // STEP3: Remove interior points by checking CCW condition
+    for (auto point : control_points) {
+        while (sorted_points.size() > 1 &&
+               CheckCCW(*(sorted_points.end() - 2), sorted_points.back(),
+                        point) <= 0) {
+            sorted_points.pop_back();
+        }
+        sorted_points.push_back(point);
+    }
+
+    return sorted_points;
+}
+
 void DrawPoint(int x, int y) {
     glPointSize(7);
     glColor3f(0.0f, 0.0f, 0.0f);
@@ -83,61 +165,49 @@ void DrawSpline(SplineMatrix& spline) {
 void DrawSimplex(std::string spline_type_, unsigned int style = 0) {
     // Draw lines or polygons to illustrate the simplex ("control polygon")
     if (num_points >= num_control_points) {
+        glPushAttrib(GL_ENABLE_BIT);
         switch (style) {
             case (1):
-                glPushAttrib(GL_ENABLE_BIT);
                 glLineStipple(4, 0xAAAA);
                 glEnable(GL_LINE_STIPPLE);
                 glColor3f(0.0f, 0.0f, 0.0f);
                 glLineWidth(1.5f);
-                glBegin(GL_LINES);
 
+                // Draw lines between adjacent points
+                glBegin(GL_LINES);
                 for (unsigned int i = 0; i < num_points - 1; i++) {
                     glVertex2i(points[i].first, points[i].second);
                     glVertex2i(points[i + 1].first, points[i + 1].second);
                 }
                 glEnd();
-                glPopAttrib();
                 break;
             case (2):
-                if (spline_type_ == "Hermite" || spline_type_ == "Bezier" ||
-                    spline_type == "MINVO") {
-                    for (unsigned int i = 0; i < num_splines; i++) {
-                        glPushAttrib(GL_ENABLE_BIT);
-                        glColor4f(0.2f, 0.5f, 0.2f, 0.2f);
-                        glBegin(GL_POLYGON);
+                glColor4f(0.2f, 0.5f, 0.2f, 0.2f);
 
-                        for (unsigned int j = 0; j < num_control_points; j++) {
-                            glVertex2i(points[num_control_points +
-                                              spline_degree * i - j - 1]
-                                           .first,
-                                       points[num_control_points +
-                                              spline_degree * i - j - 1]
-                                           .second);
-                        }
-                        glPopAttrib();
-                        glEnd();
+                for (unsigned int i = 0; i < num_splines; i++) {
+                    unsigned int iter = 1;
+                    if (spline_type_ == "Hermite" || spline_type_ == "Bezier" ||
+                        spline_type == "MINVO")
+                        iter = spline_degree;
+
+                    PairVector control_points =
+                        ReturnLastNFromM(points, num_control_points,
+                                         num_control_points + iter * i);
+                    control_points = SortConvex(control_points);
+
+                    // Draw control polygon
+                    glBegin(GL_POLYGON);
+                    for (auto point : control_points) {
+                        glVertex2i(point.first, point.second);
                     }
-                } else if (spline_type_ == "BSpline" ||
-                           spline_type_ == "CatmullRom") {
-                    for (unsigned int i = 0; i < num_splines; i++) {
-                        glPushAttrib(GL_ENABLE_BIT);
-                        glColor4f(0.2f, 0.5f, 0.2f, 0.2f);
-                        glBegin(GL_POLYGON);
-                        for (unsigned int j = 0; j < num_control_points; j++) {
-                            glVertex2i(
-                                points[num_control_points + i - j - 1].first,
-                                points[num_control_points + i - j - 1].second);
-                        }
-                        glPopAttrib();
-                        glEnd();
-                    }
+                    glEnd();
                 }
                 break;
             default:
                 std::cout << "Invalid convex hull plotting option" << std::endl;
                 break;
         }
+        glPopAttrib();
     }
 }
 
@@ -237,29 +307,6 @@ SplineMatrix ComputeSpline(PairVector& control_points, std::string spline_type_,
         spline.row(spline.rows() - 1) = spline_point;
     }
     return spline;
-}
-
-PairVector ReturnLastN(PairVector& coordinates, unsigned int n) {
-    unsigned int lenInput = static_cast<unsigned int>(coordinates.size());
-    PairVector::const_iterator init = coordinates.begin() + lenInput - n;
-    PairVector::const_iterator last = coordinates.begin() + lenInput;
-    PairVector control_points(init, last);
-
-    return control_points;
-}
-
-unsigned int ReturnPointIndex(std::string spline_type_) {
-    unsigned int index = num_points;
-
-    if (num_points >= num_control_points) {
-        if (spline_type_ == "Hermite" || spline_type_ == "Bezier" ||
-            spline_type_ == "MINVO") {
-            index = (num_points - 1) % spline_degree;
-        } else {
-            index = 0;
-        }
-    }
-    return index;
 }
 
 void EnforceContinuity(PairVector& coordinates, unsigned int GCont_,
@@ -363,23 +410,27 @@ void RemoveAllPoints() {
 }
 
 void RemovePrevPoint() {
-    std::cout << "Remove Point " << num_points << std::endl;
-    points.pop_back();
-    num_points--;
-    if (spline_type == "Hermite" || spline_type == "Bezier" ||
-        spline_type == "MINVO") {
-        if (num_points == num_control_points - 1 ||
-            ((num_points - num_control_points) % spline_degree ==
-                 (spline_degree - 1) &&
-             num_points >= num_control_points)) {
-            num_splines--;
-            splines.pop_back();
+    if (num_points > 0) {
+        std::cout << "Remove Point " << num_points << std::endl;
+        points.pop_back();
+        num_points--;
+        if (spline_type == "Hermite" || spline_type == "Bezier" ||
+            spline_type == "MINVO") {
+            if (num_points == num_control_points - 1 ||
+                ((num_points - num_control_points) % spline_degree ==
+                     (spline_degree - 1) &&
+                 num_points >= num_control_points)) {
+                num_splines--;
+                splines.pop_back();
+            }
+        } else {
+            if (num_points >= num_control_points - 1) {
+                splines.pop_back();
+                num_splines--;
+            }
         }
     } else {
-        if (num_points >= num_control_points - 1) {
-            splines.pop_back();
-            num_splines--;
-        }
+        std::cout << "Cannot remove points as num_points = 0" << std::endl;
     }
 }
 
@@ -528,6 +579,12 @@ void CheckArgContinuity(std::vector<std::string> args) {
     std::cout << std::endl;
 }
 
+void CheckArgDegree() {
+    // checks whether the spline degree is less than 2
+    if (spline_degree < 2)
+        throw std::invalid_argument("specified spline degree is less than 3");
+}
+
 int main(int argc, char* argv[]) {
     std::vector<std::string> args(argv, argv + argc);
     // required arguments
@@ -536,6 +593,7 @@ int main(int argc, char* argv[]) {
     // optional arguments
     CheckArgConvexHull(args);
     CheckArgContinuity(args);
+    CheckArgDegree();
 
     glutInit(&argc, argv);
     CreateScreen();
